@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.gitlite-test-tmp/
+.env

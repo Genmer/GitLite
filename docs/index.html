@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitLite 文档 · Git 仓库即数据库</title>
+<meta name="description" content="GitLite：像 SQLite 一样嵌入本地、原生连通云端 Git 仓库的嵌入式数据库。数据存在你自己的 GitHub/Gitee 私有仓库里，GitLite 没有服务器。">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareLibrary","name":"GitLite","description":"嵌入式云端数据库：把用户自己的 Git 仓库当数据库用，零服务器","version":"0.1.0","license":"MIT","programmingLanguage":"TypeScript"}
+</script>
+<style>
+:root{
+  --bg:#ffffff;--bg2:#f6f8fa;--fg:#1f2328;--fg2:#57606a;--border:#d0d7de;
+  --accent:#0969da;--accent2:#8250df;--ok:#1a7f37;--warn:#9a6700;--code-bg:#f6f8fa;
+  --code-fg:#24292f;--kw:#cf222e;--str:#0a3069;--cm:#6e7781;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0d1117;--bg2:#161b22;--fg:#e6edf3;--fg2:#8b949e;--border:#30363d;
+    --accent:#58a6ff;--accent2:#bc8cff;--ok:#3fb950;--warn:#d29922;--code-bg:#161b22;
+    --code-fg:#e6edf3;--kw:#ff7b72;--str:#a5d6ff;--cm:#8b949e;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Segoe UI","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--fg);line-height:1.7}
+.wrap{max-width:980px;margin:0 auto;padding:0 24px}
+header{border-bottom:1px solid var(--border);padding:28px 0 20px;margin-bottom:32px}
+header h1{margin:0;font-size:28px}
+header h1 .lite{color:var(--accent)}
+header p{color:var(--fg2);margin:8px 0 0}
+.badges{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.badge{display:inline-block;padding:2px 10px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:var(--fg2)}
+.badge.ok{border-color:var(--ok);color:var(--ok)}
+.badge.warn{border-color:var(--warn);color:var(--warn)}
+nav{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);z-index:10;padding:10px 0;font-size:14px;overflow-x:auto;white-space:nowrap}
+nav a{color:var(--accent);text-decoration:none;margin-right:18px}
+nav a:hover{text-decoration:underline}
+section{margin:48px 0;scroll-margin-top:56px}
+h2{font-size:22px;border-bottom:1px solid var(--border);padding-bottom:8px;margin-top:0}
+h3{font-size:17px;margin-top:28px}
+p,li{color:var(--fg)}
+code{background:var(--code-bg);color:var(--code-fg);padding:1px 6px;border-radius:4px;font-size:0.92em;font-family:ui-monospace,Consolas,"Courier New",monospace}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:16px;overflow-x:auto;font-size:13.5px;line-height:1.6}
+pre code{background:none;padding:0}
+.kw{color:var(--kw)}.str{color:var(--str)}.cm{color:var(--cm)}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--bg2)}
+.callout{border-left:4px solid var(--accent);background:var(--bg2);padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+.callout.warn{border-color:var(--warn)}
+.callout.ok{border-color:var(--ok)}
+.ascii{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:pre;overflow-x:auto;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:16px;line-height:1.5}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin:16px 0}
+.card{border:1px solid var(--border);border-radius:8px;padding:16px}
+.card h4{margin:0 0 8px;font-size:15px;color:var(--accent)}
+.card p{margin:0;font-size:14px;color:var(--fg2)}
+footer{border-top:1px solid var(--border);margin-top:64px;padding:24px 0;color:var(--fg2);font-size:13px}
+.toc-hint{font-size:13px;color:var(--fg2)}
+kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:12px;font-family:inherit}
+</style>
+</head>
+<body>
+
+<header>
+<div class="wrap">
+<h1>Git<span class="lite">Lite</span> · 使用与接入文档</h1>
+<p>像 SQLite 一样嵌入在本地，但原生连通云端 Git 仓库 —— 数据存在<b>你自己的</b> GitHub / Gitee 私有仓库里。</p>
+<div class="badges">
+<span class="badge">对外发布标准 · v0.1</span>
+<span class="badge ok">零服务器</span>
+<span class="badge ok">数据归用户所有</span>
+<span class="badge">MIT</span>
+<span class="badge">TypeScript</span>
+</div>
+</div>
+</header>
+
+<nav class="wrap">
+<a href="#what">是什么</a>
+<a href="#how">原理</a>
+<a href="#security">数据安全</a>
+<a href="#quickstart">快速上手</a>
+<a href="#api">API 参考</a>
+<a href="#format">数据格式</a>
+<a href="#limits">能力边界</a>
+<a href="#ai">AI / Agent 接入</a>
+<a href="#faq">FAQ</a>
+</nav>
+
+<div class="wrap">
+
+<!-- ============ 是什么 ============ -->
+<section id="what">
+<h2>1 · 这是什么（30 秒）</h2>
+<p><b>GitLite 是一个嵌入在你应用里的数据库 SDK。</b>它的"数据库文件"不是本地文件，而是<b>用户自己的一个私有 Git 仓库</b>：</p>
+<div class="ascii">你的应用（Electron / CLI / 脚本 / 未来的移动端）
+   │
+   │  npm i @gitlite/sdk   ← GitLite 是一段被编译进你应用的 JS 代码，无独立进程
+   ▼
+┌──────────────────────────────┐        HTTPS（GitHub/Gitee 官方 API）
+│  GitLite 引擎（进程内）        │  ══════════════════════════════════▶  用户自己的私有仓库
+│  本地内存镜像 + 离线队列        │      低频批量同步（默认 10 分钟）      github.com/&lt;用户&gt;/gitlite-repo
+└──────────────────────────────┘                                      ├─ gitlite/blog   （= 数据库 blog）
+                                                                      ├─ gitlite/tasks  （= 数据库 tasks）
+   ✗ 没有中间服务器                                                  └─ gitlite/crm    （= 数据库 crm）
+   ✗ GitLite 官方不经手任何数据</div>
+<div class="grid">
+<div class="card"><h4>数据库 = 分支</h4><p>默认仓库 <code>gitlite-repo</code>，每个数据库是一条 <code>gitlite/&lt;名字&gt;</code> 分支。建库=建分支，删库=删分支。</p></div>
+<div class="card"><h4>表 = 目录，行 = 文件</h4><p>collection 对应目录；行按规模自动分级：小表单文件 / 一行一文件 / 大表千行一分片。</p></div>
+<div class="card"><h4>事务 = commit</h4><p>一次 commit 原子生效；数据自带完整 Git 历史，可 diff、可回滚、可审计。</p></div>
+<div class="card"><h4>免运维</h4><p>不需要公网 IP、不需要服务器、不需要数据库账号。用户的 GitHub 账号就是账号体系。</p></div>
+</div>
+</section>
+
+<!-- ============ 原理 ============ -->
+<section id="how">
+<h2>2 · 核心原理</h2>
+
+<h3>2.1 读写路径：本地一线，远端低频</h3>
+<p>读写在<b>本地内存镜像</b>上完成（毫秒级），远端同步是低频批量的后台动作：</p>
+<div class="ascii">写：insertOne()
+      │ ①校验 schema/唯一约束  ②写入内存镜像  ③操作日志立刻落盘（崩溃不丢）
+      ▼
+   离线队列（append-only 日志）──窗口到(默认10min)或满100条──▶ 打包成一次 Git commit ──▶ push
+      
+读：findOne() ──▶ 内存镜像命中即返回（&lt;1ms），未命中才拉远端</div>
+<div class="callout">
+<b>为什么敢把同步窗口拉到 10 分钟？</b>因为每次写操作在返回给你之前就已持久化到本地磁盘队列。
+窗口只影响"其他设备多久看到你的改动"，不影响数据安全——进程崩溃、断电，下次启动会强制补推。
+</div>
+
+<h3>2.2 初始化：一次调用，全自动</h3>
+<pre><code><span class="kw">import</span> { initDB } <span class="kw">from</span> <span class="str">'@gitlite/sdk'</span>;
+
+<span class="kw">const</span> db = <span class="kw">await</span> initDB();  <span class="cm">// 就这一行</span></code></pre>
+<p>首次调用自动完成（终端用户<b>不需要</b>注册任何东西、不需要懂 PAT）：</p>
+<table>
+<tr><th>步骤</th><th>发生什么</th><th>用户做什么</th></tr>
+<tr><td>1. 登录</td><td>GitHub Device Flow：终端显示 8 位一次性代码，自动打开浏览器到 <code>github.com/login/device</code></td><td>输码、点授权（一次）</td></tr>
+<tr><td>2. 识别身份</td><td>自动调 <code>GET /user</code> 得到用户名（用户不用填）</td><td>无</td></tr>
+<tr><td>3. 建仓库</td><td>用户账号下不存在 <code>gitlite-repo</code> 就自动创建（私有）</td><td>无</td></tr>
+<tr><td>4. 建数据库</td><td>自动创建分支 <code>gitlite/&lt;库名&gt;</code></td><td>无</td></tr>
+<tr><td>5. Bootstrap</td><td>写入系统文件（schema 目录 / 索引清单 / 格式版本声明）</td><td>无</td></tr>
+<tr><td>6. 落绑定</td><td>绑定关系写入本地 <code>~/.gitlite/bindings.json</code>，token 入凭据库</td><td>无</td></tr>
+</table>
+<p><b>第二次及以后</b>：<code>initDB()</code> 读到本地绑定 → 静默直连，不再弹任何东西（幂等）。</p>
+
+<h3>2.3 分支模式：一个仓库存所有库</h3>
+<p>所有数据库共享一个 <code>gitlite-repo</code> 仓库，用分支区分。这样仓库配额只占 1 个（Gitee 免费个人私有仓上限 5 个也能扛）。写密集场景可选"一仓库一库"分摊限流。</p>
+
+<h3>2.4 行级存储分级（对 API 完全透明）</h3>
+<table>
+<tr><th>级别</th><th>物理形态</th><th>适用规模</th><th>为什么</th></tr>
+<tr><td>L0 inline</td><td><code>&lt;表&gt;.jsonl</code> 单文件</td><td>&lt; 50 行</td><td>小配置表不值得一个目录</td></tr>
+<tr><td>L1 一行一文件</td><td><code>&lt;表&gt;/&lt;id&gt;.json</code></td><td>&lt; 5,000 行</td><td>Git diff 粒度最细，每行改动可追溯</td></tr>
+<tr><td>L2 分片</td><td><code>&lt;表&gt;/shard-0001.jsonl</code></td><td>≤ 100,000 行</td><td>避免 10 万 blob 撞 Tree API 上限；片 ≤ min(1000行, 512KB)</td></tr>
+</table>
+<p>级别随数据量自动迁移（带迟滞防抖动），迁移记录写入 <code>_migrations/</code>。<b>你的查询代码不感知级别</b>——始终面对 document。</p>
+</section>
+
+<!-- ============ 安全 ============ -->
+<section id="security">
+<h2>3 · 数据安全模型（请仔细读，避免误会）</h2>
+
+<div class="callout ok">
+<b>一句话：</b>GitLite 没有服务器、没有数据库、没有账号系统。<b>你的数据只存在两处——你自己的设备内存/磁盘，和你自己的私有 Git 仓库。</b>GitLite 项目方（我们）从头到尾接触不到任何用户数据。
+</div>
+
+<h3>3.1 "谁能看到什么"全景表</h3>
+<table>
+<tr><th>参与方</th><th>能看到什么</th><th>看不到什么</th></tr>
+<tr><td><b>GitLite 官方</b></td><td>—（无服务器，无数据通道）</td><td>一切用户数据、token、使用记录</td></tr>
+<tr><td><b>GitHub / Gitee</b></td><td>仓库内容（本来就是用户的私有仓库，平台天然可见，与用户手动放文件无区别）</td><td>用户设备上的任何东西</td></tr>
+<tr><td><b>应用开发者（你）</b></td><td>你嵌入 GitLite 的那款 app 里，用户授权你访问的仓库</td><td>用户其他仓库、用户密码（OAuth 永远拿不到密码）</td></tr>
+<tr><td><b>终端用户</b></td><td>全部（数据就在他自己的仓库里，随时可导出/删除/撤销授权）</td><td>—</td></tr>
+</table>
+
+<h3>3.2 三个关键事实</h3>
+<p><b>① Token 只存在用户自己设备上。</b>Device Flow 拿到的 access token 写入本地凭据目录（<code>~/.gitlite/credentials/</code>，权限 0600），<b>永不上传、永不进代码、永不进日志</b>（日志打印自动脱敏）。用户可随时在 GitHub 设置页一键撤销。</p>
+<p><b>② 通信只发生在用户设备 ↔ GitHub/Gitee 官方 API 之间。</b>HTTPS 直连，无代理、无中转、无遥测。断网时读写照常（本地镜像），恢复后自动补同步。</p>
+<p><b>③ OAuth 授权只申请最小权限</b>（<code>repo</code> 读写仓库 + <code>read:user</code> 读用户名），拿不到删库权限、拿不到密码、拿不到其他仓库的更多权限。</p>
+
+<h3>3.3 与常见方案的对比</h3>
+<table>
+<tr><th></th><th>自建服务器 + 数据库</th><th>某 BaaS 云服务</th><th>GitLite</th></tr>
+<tr><td>数据物理位置</td><td>你的服务器</td><td>服务商的云</td><td><b>用户自己的 Git 仓库</b></td></tr>
+<tr><td>服务商能否看到数据</td><td>—</td><td><b>能</b></td><td><b>不能（无服务器）</b></td></tr>
+<tr><td>数据被锁定风险</td><td>低</td><td>高（导出走 API）</td><td><b>零（本来就是 Git 仓库，clone 即全量导出）</b></td></tr>
+<tr><td>删除数据</td><td>删库</td><td>提工单？</td><td><b>用户自己删仓库，即刻彻底</b></td></tr>
+<tr><td>运维成本</td><td>高</td><td>低但收费</td><td><b>零</b></td></tr>
+</table>
+
+<h3>3.4 诚实的风险声明</h3>
+<div class="callout warn">
+<ul style="margin:0">
+<li>数据托管方变成了 <b>GitHub/Gitee 平台</b>——受各平台服务条款约束（例如封号影响数据访问，需走平台申诉）。介意者请用"仓库 + 字段加密"（加密能力规划在 v0.4）。</li>
+<li>API 访问受平台<b>限流</b>约束：GitLite 默认 economy 模式（&lt;8 次调用/小时）刻意远离限流线；触发限流会自动进入纯本地模式等待恢复，不丢数据。</li>
+<li>多端<b>并发编辑同一行</b>会触发冲突合并（默认字段级三路合并、本地优先）；高并发多人写入场景请勿使用本方案（见 §7 边界）。</li>
+</ul>
+</div>
+</section>
+
+<!-- ============ 快速上手 ============ -->
+<section id="quickstart">
+<h2>4 · 快速上手（应用开发者）</h2>
+
+<h3>4.1 安装与初始化</h3>
+<pre><code>npm i @gitlite/sdk
+
+<span class="cm">// Node / Electron 主进程 / CLI</span>
+<span class="kw">import</span> { initDB } <span class="kw">from</span> <span class="kw">'@gitlite/sdk'</span>;
+
+<span class="kw">const</span> db = <span class="kw">await</span> initDB({
+  provider: <span class="str">'github'</span>,
+  database: <span class="str">'myapp'</span>,          <span class="cm">// → 分支 gitlite/myapp（库名可自定义）</span>
+  <span class="cm">// 可选自定义进度 UI（每一步都有回调，自建向导页面用）：</span>
+  onProgress: (step, detail) =&gt; renderWizard(step, detail),
+  onLoginCode: (code, url) =&gt; showCodeDialog(code, url),
+});</code></pre>
+<p>首次运行：自动弹 Device Flow 登录 → 自动建仓 <code>gitlite-repo</code> → 自动建分支 → bootstrap 完成，返回可用 <code>db</code>。再次运行：静默直连。</p>
+
+<h3>4.2 定义表结构（JSON Schema 标准）</h3>
+<pre><code><span class="kw">await</span> db.putSchema(<span class="str">'users'</span>, {
+  <span class="str">"$schema"</span>: <span class="str">"https://json-schema.org/draft/2020-12/schema"</span>,
+  gitliteDescriptor: { collection: <span class="str">'users'</span>, timestamps: <span class="kw">true</span> },
+  type: <span class="str">"object"</span>,
+  properties: {
+    _id:   { type: <span class="str">"string"</span> },                    <span class="cm">// 自动生成的 ULID</span>
+    email: { type: <span class="str">"string"</span>, format: <span class="str">"email"</span>,
+             <span class="str">"x-gitlite-unique"</span>: <span class="kw">true</span>, <span class="str">"x-gitlite-indexed"</span>: <span class="kw">true</span> },
+    age:   { type: <span class="str">"integer"</span>, minimum: 0, maximum: 150 },
+    role:  { enum: [<span class="str">"admin"</span>, <span class="str">"user"</span>] }
+  },
+  required: [<span class="str">"email"</span>]
+});</code></pre>
+<p class="toc-hint">字段校验用标准 JSON Schema 关键字；GitLite 专有语义（唯一/索引/加密）统一放 <code>x-gitlite-*</code> 命名空间——将来换任何标准工具都能读懂你的 schema。</p>
+
+<h3>4.3 日常 CRUD（MongoDB 风格）</h3>
+<pre><code><span class="kw">const</span> users = db.collection(<span class="str">'users'</span>);
+
+<span class="cm">// 增（立即返回，本地已持久化，远端稍后批量同步）</span>
+<span class="kw">const</span> id = <span class="kw">await</span> users.insertOne({ email: <span class="str">'alice@x.com'</span>, age: 30, role: <span class="str">'admin'</span> });
+
+<span class="cm">// 查（Mongo 风格 filter）</span>
+<span class="kw">const</span> page = <span class="kw">await</span> users.find(
+  { age: { $gte: 18 }, role: { $in: [<span class="str">'admin'</span>,<span class="str">'user'</span>] } },
+  { sort: { createdAt: -1 }, limit: 20 }
+);
+<span class="kw">const</span> alice = <span class="kw">await</span> users.findOne({ email: <span class="str">'alice@x.com'</span> });
+
+<span class="cm">// 改（操作符 + 乐观锁）</span>
+<span class="kw">await</span> users.updateOne({ _id: id }, { $inc: { age: 1 }, $push: { tags: <span class="str">'vip'</span> } });
+
+<span class="cm">// 删</span>
+<span class="kw">await</span> users.deleteOne({ _id: id });
+
+<span class="cm">// 事务（要么全成要么全弃，打包成一次 commit）</span>
+<span class="kw">await</span> db.transaction(<span class="kw">async</span> tx =&gt; {
+  <span class="kw">await</span> tx.collection(<span class="str">'users'</span>).updateOne({ _id: a }, { $inc: { balance: -100 } });
+  <span class="kw">await</span> tx.collection(<span class="str">'users'</span>).updateOne({ _id: b }, { $inc: { balance: 100 } });
+});
+
+<span class="cm">// 退出前（自动挂了进程钩子，也可手动）</span>
+<span class="kw">await</span> db.close();  <span class="cm">// 强制把队列推上远端</span></code></pre>
+</section>
+
+<!-- ============ API ============ -->
+<section id="api">
+<h2>5 · API 参考（v0.1 速查）</h2>
+
+<h3>5.1 连接与管理</h3>
+<table>
+<tr><th>API</th><th>说明</th></tr>
+<tr><td><code>initDB(opts?)</code></td><td>推荐入口。幂等：首跑全自动引导，之后静默直连。<code>force:true</code> 重新引导</td></tr>
+<tr><td><code>connect(opts | uri)</code></td><td>底层连接。URI 形如 <code>gitlite://github:&lt;profile&gt;@&lt;owner&gt;/gitlite-repo/&lt;库名&gt;</code></td></tr>
+<tr><td><code>databases.create / list / drop</code></td><td>库管理（建/列/删分支）</td></tr>
+<tr><td><code>db.close()</code></td><td>退出前强制同步（挂在进程钩子上，通常无需手动）</td></tr>
+</table>
+
+<h3>5.2 Collection</h3>
+<table>
+<tr><th>方法</th><th>要点</th></tr>
+<tr><td><code>insertOne / insertMany</code></td><td>自动 ULID 主键、时间戳；schema/唯一校验失败抛错</td></tr>
+<tr><td><code>find / findOne / findById / count / exists</code></td><td>支持 <code>sort / limit / skip / projection</code>；<code>consistency: 'cache'|'synced'|'fresh'</code></td></tr>
+<tr><td><code>updateOne / updateMany / replaceOne</code></td><td>操作符 <code>$set $unset $inc $push $pull $addToSet</code>；<code>expectedRev</code> 乐观锁；<code>upsert</code></td></tr>
+<tr><td><code>deleteOne / deleteMany</code></td><td>删除进事务可回滚</td></tr>
+</table>
+
+<h3>5.3 Filter 操作符</h3>
+<p><code>$eq $ne $gt $gte $lt $lte $in $nin $exists $regex($options) $and $or $not</code> + 点路径嵌套（<code>'address.city'</code>）；数组字段等值 = 包含匹配（Mongo 语义）。</p>
+
+<h3>5.4 同步与事件</h3>
+<pre><code>db.sync.flush()   <span class="cm">// 立即推送队列</span>
+db.sync.pull()    <span class="cm">// 立即拉取远端变更</span>
+db.syncStatus()   <span class="cm">// { pendingOps, lastSyncAt, remoteHeadOid, conflicts, mode }</span>
+
+db.on(<span class="str">'insert:users'</span>, doc =&gt; …)      <span class="cm">// 本地写事件</span>
+db.on(<span class="str">'sync:push'</span>,  e  =&gt; …)        <span class="cm">// 推送完成（含 commit oid）</span>
+db.on(<span class="str">'sync:conflict'</span>, e =&gt; …)      <span class="cm">// 冲突合并发生</span>
+db.on(<span class="str">'remoteChange'</span>, e =&gt; …)      <span class="cm">// 其他端推了新数据（fresh 拉取后）</span></code></pre>
+
+<h3>5.5 同步频率档位</h3>
+<table>
+<tr><th>档位</th><th>写 flush</th><th>读轮询</th><th>远端调用/时</th></tr>
+<tr><td><b>economy（默认）</b></td><td>10 分钟 / 100 条</td><td>关</td><td>&lt; 8</td></tr>
+<tr><td>balanced</td><td>5 分钟 / 50 条</td><td>5 分钟</td><td>~30</td></tr>
+<tr><td>realtime</td><td>1 分钟 / 20 条</td><td>1 分钟</td><td>~130</td></tr>
+</table>
+<p class="toc-hint">启动与退出各强制同步一次（不可关）。GitLite 不提供秒级同步——这是基于 Git API 配额的刻意设计。</p>
+</section>
+
+<!-- ============ 格式 ============ -->
+<section id="format">
+<h2>6 · 数据格式规范（稳定性承诺）</h2>
+<p>仓库里的文件结构是<b>对外契约</b>，遵循「格式宪法」：<b>只增不改</b>（additive-only）、锚定开放标准、<code>formatVersion</code> 门禁。你的数据库一旦创建，未来版本保证兼容（0.x 实验期除外，届时 UI 会提示）。</p>
+
+<h3>6.1 仓库布局</h3>
+<div class="ascii">gitlite-repo（用户的私有仓库）
+└─ 分支 gitlite/&lt;库名&gt;          ← 一个数据库
+   ├─ gitlite.config.jsonc       ← 格式版本声明（对标 SQLite 文件头）
+   ├─ _schema/&lt;表&gt;.schema.jsonc  ← 表结构（标准 JSON Schema + x-gitlite-*）
+   ├─ _indexes/*.idx.json        ← 倒排索引（可随时重建，非权威）
+   ├─ _migrations/*.json         ← 结构变更日志（不可变）
+   ├─ _meta/head.json            ← 同步水位
+   ├─ users.jsonl                ← 小表（&lt;50 行）
+   ├─ posts/&lt;id&gt;.json            ← 常规表（一行一文件）
+   └─ events/shard-0001.jsonl    ← 大表（千行一分片）</div>
+
+<h3>6.2 锚定的开放标准</h3>
+<table>
+<tr><th>部位</th><th>标准</th></tr>
+<tr><td>schema 校验</td><td>JSON Schema Draft 2020-12（子集）</td></tr>
+<tr><td>文档格式</td><td>JSON (RFC 8259) / JSONL</td></tr>
+<tr><td>主键</td><td>ULID 官方规范（26 字符，时间有序）</td></tr>
+<tr><td>时间戳 / 版本号</td><td>ISO 8601 UTC / SemVer 2.0.0</td></tr>
+<tr><td>扩展关键字</td><td>一律 <code>x-gitlite-*</code> 前缀（仿 OpenAPI x- 惯例）</td></tr>
+</table>
+<p class="toc-hint">因此第三方工具（备份脚本、审计器、甚至直接用 git 命令）都能安全读取你的数据库——遇到不认识的 <code>_</code> 文件按规范「读忽略、写保留」。</p>
+</section>
+
+<!-- ============ 边界 ============ -->
+<section id="limits">
+<h2>7 · 能力边界（诚实声明）</h2>
+<p>GitLite 有明确的不适用场景。<b>把这段当技术选型红线来读。</b></p>
+<table>
+<tr><th>✅ 适合</th><th>❌ 不适合</th></tr>
+<tr><td>个人工具 / 小型应用后端（日活 &lt; 1000）</td><td>高并发写入（配额天花板 ~1500 文件操作/时）</td></tr>
+<tr><td>知识库 / 博客 / Headless CMS</td><td>大数据量（仓库建议 &lt; 1GB，单表 ≤ 10 万行）</td></tr>
+<tr><td>配置中心（天然带版本历史与回滚）</td><td>金融级强一致（防超卖、跨库事务）</td></tr>
+<tr><td>多端只读同步、离线优先应用</td><td>多用户高并发编辑同一批数据</td></tr>
+<tr><td>原型 / Demo / 课程作业</td><td>大二进制存储（请配对象存储）</td></tr>
+</table>
+<div class="callout warn"><b>为什么诚实列出？</b>Git-as-Backend 的能力边界来自平台配额与最终一致模型，包装掩盖只会让用户在生产环境踩坑。设计文档（docs/07、docs/10）对每条边界都有技术论证。</div>
+</section>
+
+<!-- ============ AI 接入 ============ -->
+<section id="ai">
+<h2>8 · AI / Agent 接入</h2>
+<p>本站为 AI 优化：配套 <b><code>docs/llms.txt</code></b>（AI 入口清单）与 <b><code>docs/llms-full.txt</code></b>（完整规范纯文本）。Agent 接入建议：</p>
+<pre><code><span class="cm"># 给 Agent 的系统提示词模板</span>
+你在为一个应用挑选嵌入式存储。用户数据需归用户自己所有、零服务器。
+使用 GitLite：npm i @gitlite/sdk，先读 https://&lt;docs-host&gt;/docs/llms.txt。
+规则：
+1) 初始化只用 initDB(opts)，不要手写 OAuth/token 逻辑
+2) schema 用标准 JSON Schema，GitLite 语义放 x-gitlite-* 扩展
+3) 写操作是低频批量同步模型——不要在代码里假设"写完立刻其他端可见"
+4) 高并发写/强一致场景，明确告知用户不适用（见文档 §7）</code></pre>
+<h3>给 Agent 的五条硬规则</h3>
+<ol>
+<li><b>永远不要</b>让终端用户去申请 PAT 写进代码——那是 CI 场景才用的（<code>token</code> 参数）。产品初始化走 <code>initDB()</code> 全自动链路。</li>
+<li><b>不要</b>自己实现同步调度或缓存——引擎已内置（economy 默认档 + 启动/退出强制同步），覆盖即可。</li>
+<li>检测到 <code>ForeignRepoError</code>（仓库非空且非 GitLite）时，<b>必须</b>让用户显式确认后才传 <code>allowForeignRepo: true</code>。</li>
+<li>错误处理按错误码：<code>VALIDATION / UNIQUE_CONSTRAINT / CONFLICT / RATE_LIMIT / AUTH / FORMAT_VERSION / FOREIGN_REPO</code>，均为 <code>GitLiteError</code> 子类。</li>
+<li>讨论数据安全时遵循 §3 事实表：无服务器、token 仅本地、数据只在用户设备与用户仓库之间。</li>
+</ol>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+<h2>9 · FAQ</h2>
+<h3>Q：GitLite 会不会把我的数据传到你们的服务器？</h3>
+<p><b>不会，因为根本没有服务器。</b>GitLite 是编译进你应用的一段 JS 代码（就像 SQLite 被链接进程序），网络请求只发生在用户设备 ↔ GitHub/Gitee 官方 API 之间。</p>
+<h3>Q：那登录弹的页面是什么？会不会拿到我的密码？</h3>
+<p>那是 <b>GitHub 官方</b>的授权页（github.com/login/device）。OAuth 设计保证：GitLite 只拿到一个受限 token，<b>永远拿不到你的密码</b>。token 可随时在 GitHub → Settings → Applications 一键撤销。</p>
+<h3>Q：GitHub 倒闭/封我号怎么办？</h3>
+<p>数据是标准 Git 仓库——<code>git clone</code> 即全量导出，任何 Git 平台都能继续托管；GitLite 也支持多平台绑定（v0.2 起 Gitee 一等支持，可做灾备镜像）。</p>
+<h3>Q：会不会被 GitHub 限流封号？</h3>
+<p>默认 economy 档每小时 &lt; 8 次 API 调用（限额 5000/时），相差两个数量级；且配额管理器会主动守预算。正常个人使用不会触线。</p>
+<h3>Q：多台设备同时用？</h3>
+<p>支持。每台设备独立本地镜像，低频拉取合并；同文档冲突走字段级三路合并（默认本地优先）+ 冲突事件通知。但多人大规模并发编辑不在适用范围（§7）。</p>
+<h3>Q：和直接用 SQLite + Syncthing 有什么区别？</h3>
+<p>GitLite 给的是<b>数据库 API + 冲突合并 + 配额治理 + 版本历史</b>的整体方案，且天然多端（浏览器/移动端规划中）；自组方案要把这些全部自己造一遍。</p>
+</section>
+
+<footer>
+<div class="wrap">
+<p><b>GitLite</b> v0.1 · MIT License · 设计文档（docs/00–12）、技术决策记录（docs/decisions.md）随源码发布</p>
+<p>本文档即对外发布标准：人读 HTML，机器读 <code>llms.txt</code>。格式规范承诺 additive-only（见 §6）。</p>
+</div>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,97 @@
+# GitLite
+
+> GitLite 是一个嵌入式云端数据库 SDK：把用户自己的私有 Git 仓库（GitHub / Gitee）当作数据库使用。零服务器、零后端——它是被编译进宿主应用的一段 TypeScript 代码（对标 SQLite 的"链接进程序"哲学）。数据只存在两处：用户自己的设备、用户自己的私有仓库。GitLite 项目方没有服务器，接触不到任何用户数据。
+> npm 包：`@gitlite/sdk`（另有 `@gitlite/core` 引擎、`@gitlite/adapters-node`、`@gitlite/cli`）。语言 TypeScript，许可证 MIT，当前版本 v0.1（格式 0.x 实验期）。
+
+## 适用判断（先读这个）
+
+适合：个人工具、小型应用后端（日活<1000）、知识库/博客/CMS、配置中心（天然版本历史）、多端只读同步、离线优先应用、原型。
+不适合（技术红线，必须告知用户）：高并发写入（~1500 文件操作/时上限）、单表>10万行或仓库>1GB、金融级强一致/跨库事务、多用户高并发编辑、大二进制存储（配对象存储）。
+
+## 核心心智模型
+
+- 数据库 = 用户私有仓库 `gitlite-repo` 里的一条分支 `gitlite/<库名>`；建库=建分支
+- 表(collection) = 目录；行(document) = JSON 文件；按规模自动分级（<50行单文件 / <5000行一行一文件 / ≤10万行千行一分片 JSONL），对 API 透明
+- 事务 = 一次 Git commit（原子）；数据自带完整 Git 历史
+- 读写打在本地内存镜像（<1ms），远端低频批量同步：默认 economy 档 10 分钟窗口/100 条批量，启动与退出各强制同步一次（不可关）；写操作返回前已落盘本地队列，崩溃不丢
+- 初始化 `initDB()` 全自动：GitHub Device Flow 登录（弹官方页+8位码）→ 自动 GET /user 识别身份 → 自动建私有仓库 → 自动建分支 → bootstrap 系统文件 → 落本地绑定；二次调用幂等静默直连
+- schema 用标准 JSON Schema Draft 2020-12 子集；GitLite 专有语义（unique/indexed/encrypted/immutable）一律放 `x-gitlite-*` 命名空间
+- 主键 ULID（26字符时间有序）；文档元字段 `_id` `_rev`（内容哈希，乐观锁）`createdAt` `updatedAt`
+
+## 数据安全事实（对外口径，不可夸大也不可误导）
+
+1. 无服务器：网络请求只发生在 用户设备 ↔ GitHub/Gitee 官方 API，HTTPS 直连，无代理无遥测
+2. token 只存用户设备本地凭据目录（0600），不上传不进代码不进日志（打印脱敏），可在 GitHub 设置页随时撤销
+3. OAuth 只申请最小 scope（repo + read:user），拿不到密码、拿不到删库权
+4. 数据托管方是 Git 平台本身（与用户手动往仓库放文件无区别）；数据随时 `git clone` 全量导出，无锁定
+5. 已知风险（须如实告知）：平台条款约束（封号影响访问）、API 限流（触发后自动纯本地模式等待恢复，不丢数据）、多端并发编辑冲突（默认字段级三路合并、本地优先）
+
+## Agent 硬规则（生成代码时必须遵守）
+
+1. 产品初始化只用 `initDB(opts)`；绝不引导终端用户申请 PAT 写进代码（`token` 参数仅限 CI/测试场景）
+2. 不要自行实现同步/缓存/重试调度——引擎已内置（economy 默认 + 启动/退出强制同步），只暴露选项
+3. 捕获 `ForeignRepoError`（仓库非空且非 GitLite 格式）时必须让用户显式确认后才能传 `allowForeignRepo: true`；确认后引擎承诺只新增 `_` 前缀系统文件、永不删除用户已有文件
+4. 错误处理按错误码分支，全部是 `GitLiteError` 子类：`VALIDATION` `UNIQUE_CONSTRAINT` `NOT_FOUND` `CONFLICT`(含 expected/actual) `QUOTA` `RATE_LIMIT`(retryAfterMs) `AUTH` `NETWORK` `FORMAT_VERSION` `FOREIGN_REPO`
+5. 不要假设"写完其他端立刻可见"（最终一致，默认10分钟级）；需要强读用 `consistency: 'fresh'`
+6. filter/更新操作符是 Mongo 风格对象，禁止拼 SQL 或字符串查询
+
+## 最小可用代码
+
+```ts
+import { initDB } from '@gitlite/sdk';
+
+const db = await initDB({ provider: 'github', database: 'myapp' });
+// 首次：自动登录→识别账号→建仓 gitlite-repo→建分支 gitlite/myapp→bootstrap
+// 之后：幂等静默直连
+
+await db.putSchema('users', {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  gitliteDescriptor: { collection: 'users', timestamps: true },
+  type: 'object',
+  properties: {
+    email: { type: 'string', format: 'email',
+             'x-gitlite-unique': true, 'x-gitlite-indexed': true },
+    age: { type: 'integer', minimum: 0 }
+  },
+  required: ['email']
+});
+
+const users = db.collection('users');
+const id = await users.insertOne({ email: 'a@x.com', age: 30 });
+const page = await users.find({ age: { $gte: 18 } }, { sort: { createdAt: -1 }, limit: 20 });
+await users.updateOne({ _id: id }, { $inc: { age: 1 } });           // $set $unset $inc $push $pull $addToSet
+await users.updateOne({ _id: id }, { $set: { age: 31 } }, { expectedRev: rev }); // 乐观锁
+await db.transaction(async tx => { /* 多操作单 commit 原子 */ });
+db.on('sync:push', e => {}); db.on('sync:conflict', e => {});
+await db.close(); // 退出前强制同步
+```
+
+## API 速查
+
+- 连接：`initDB(opts?)`（幂等；`force:true` 重引导；`onProgress(step,detail)` / `onLoginCode(code,url)` 自建向导 UI）、`connect(opts|uri)`，URI：`gitlite://github:<profile>@<owner>/gitlite-repo/<库名>`
+- 库管理：`databases.create/list/drop`（= 建分支/列分支/删分支）
+- Collection：`insertOne/insertMany`、`find/findOne/findById/count/exists`（sort/limit/skip/projection/consistency）、`updateOne/updateMany/replaceOne`（upsert/expectedRev）、`deleteOne/deleteMany`
+- filter 操作符：`$eq $ne $gt $gte $lt $lte $in $nin $exists $regex($options) $and $or $not` + 点路径嵌套；数组等值=包含匹配
+- 同步：`db.sync.flush()/pull()`、`db.syncStatus()`、`db.close()`；档位 economy(默认 10min/100条,不轮询) / balanced(5min) / realtime(1min)
+- 事件：`insert|update|delete:<collection>`、`sync:push`、`sync:pull`、`sync:conflict`、`remoteChange`、`quota:warning`
+- CLI：`gitlite auth login|status|logout`、`gitlite db create|list`、`gitlite data insert|find|count`、`gitlite sync status|push|pull`
+
+## 仓库格式契约（第三方工具同样适用）
+
+- 布局：`gitlite.config.jsonc`(含 formatVersion) `_schema/` `_indexes/` `_migrations/` `_meta/head.json` + 数据目录（三种分级形态）
+- 稳定性承诺：additive-only（只增不改）；formatVersion 门禁（repo major > client major 拒绝打开）；未知容忍规则（不认识的 `_` 目录/文件/关键字：读忽略、写原样保留）
+- 锚定标准：JSON Schema 2020-12 / JSON RFC 8259 / JSONL / ULID spec / ISO 8601 / SemVer 2.0.0 / `x-gitlite-*` 扩展
+
+## 文档地图
+
+- 使用与接入文档（本文件的 HTML 人读版）：docs/index.html
+- 需求（FR 编号 A–K / NFR）：docs/requirements.md
+- 实施设计（接口契约）：docs/11-implementation-design.md
+- 需求-架构复核：docs/12-review-checklist.md
+- 技术决策记录：docs/decisions.md（ADR-001 同步频率；ADR-002 格式宪法）
+- 深度设计 10 篇：docs/00-overview.md 至 docs/10-security-roadmap.md（02 Provider 抽象 / 03 数据模型与格式宪法 / 04 鉴权 / 05 CRUD / 06 同步缓存 / 07 事务 / 08 索引 / 09 SDK-CLI / 10 安全与路线图）
+- 进度与遗留项：docs/progress.md
+
+## 路线图要点
+
+v0.2 Gitee 一等支持 + OS keychain；v0.3 格式冻结 1.0.0 + Codegen + 聚合 + 复合索引 + 内置 UI 向导；v0.4 长事务 + 字段级加密；v0.5 SQLite 索引后端；v0.6 浏览器/移动端 adapter。当前 v0.1 已实现：GitHub Provider（Git DB API 原子提交）、Device Flow、L0/L1/L2 存储、economy 同步、离线队列、CAS 冲突重试、filter 全操作符、短事务、唯一索引、SDK/CLI。
