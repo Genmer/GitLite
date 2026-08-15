@@ -4,6 +4,12 @@
 
 GitLite 把任意 Git 仓库（首先支持 GitHub 和 Gitee）抽象成一个**嵌入式云端数据库**——把远程仓库当成本地工作内存来用（类似 Java 的抽象工作内存）。它提供简单易用的 API 给上层应用，让开发者像用 SQLite / MongoDB 一样操作 Git 仓库，无需公网 IP、无需服务器。
 
+## 🤖 协作与进度控制（入口）
+
+- **AI / 新协作者必读**：[AGENTS.md](./AGENTS.md) —— 协作规矩（开工先读、收工必更新）、硬原则、验证命令、已知坑。
+- **进度唯一入口**：[docs/progress.md](./docs/progress.md) —— 流程模型、阶段状态、里程碑、变更日志；**开工先读它，收工必更新它**。
+- **需求与红线**：[docs/requirements.md](./docs/requirements.md)（FR/NFR/MVP 边界）、[docs/13-limits-and-ceiling.md](./docs/13-limits-and-ceiling.md)（平台配额物理天花板与立项红线）。
+
 ## 核心理念
 
 - **分支 = 数据库（默认）**：默认仓库 `gitlite-repo` 内用 `gitlite/<库名>` 分支区分 database（一个仓库存所有库，规避 Gitee 私有仓上限）；也支持一仓库一库分摊 push 配额。
@@ -20,7 +26,7 @@ GitLite 把任意 Git 仓库（首先支持 GitHub 和 Gitee）抽象成一个**
 
 ## 设计文档
 
-完整设计见 [`docs/`](./docs) 目录，共 11 篇 + 决策记录：
+完整设计见 [`docs/`](./docs) 目录，共 15 篇 + 需求/进度/决策记录：
 
 | # | 文档 | 内容 |
 |---|---|---|
@@ -35,7 +41,13 @@ GitLite 把任意 Git 仓库（首先支持 GitHub 和 Gitee）抽象成一个**
 | 08 | [索引与性能](./docs/08-indexing-performance.md) | 倒排索引文件格式、查询计划器与 explain、SQLite 可选后端、性能基准、预热缓存、监控调优、降级容错 |
 | 09 | [SDK 与 CLI](./docs/09-sdk-cli.md) | pnpm monorepo、SDK API + URI 连接串、Codegen 强类型 Client、CLI 全命令集、REPL、React Hooks、跨运行时适配、插件机制 |
 | 10 | [安全与路线图](./docs/10-security-roadmap.md) | GitHub/Gitee 配额矩阵、QuotaManager、字段级 AES-256-GCM 加密、密钥轮换、审计合规、威胁模型、v0.1→v1.0 路线图 |
-| ADR | [技术决策记录](./docs/decisions.md) | ADR-001 同步频率（4 方案对比→分钟级三档）、ADR-002 格式宪法（4 方案对比→开放标准锚定 + additive-only + v0.3 冻结） |
+| 11 | [实施设计](./docs/11-implementation-design.md) | 模块图、接口契约、数据流、错误模型、测试策略（P3 实现基线） |
+| 12 | [复核清单](./docs/12-review-checklist.md) | 需求-架构逐条复核：0 缺口 / 6 实现注意项 |
+| 13 | [天花板与红线](./docs/13-limits-and-ceiling.md) | 外圈：平台配额推演容量/延迟/吞吐/并发四维极限与立项红线；功能轨（Gitee/凭据库/REPL） |
+| 14 | [引擎对标 SQLite](./docs/14-engine-parity-sqlite.md) | 内圈：引擎能力逐项对标（12 项判定）+ P1a→P4 补齐序列（当前推进轨道） |
+| ADR | [技术决策记录](./docs/decisions.md) | ADR-001 同步频率（4 方案对比→分钟级三档）、ADR-002 格式宪法（开放标准锚定 + additive-only + v0.3 冻结）、ADR-003 字段级加密 |
+| REQ | [需求基线](./docs/requirements.md) | 10 用户故事 / FR A~K / NFR / MVP 边界（范围冻结，变更走记录） |
+| PROG | [开发进度](./docs/progress.md) | **唯一进度入口**：阶段状态、里程碑、质量门禁、变更日志（AI 协作规矩见 [AGENTS.md](./AGENTS.md)） |
 | 📖 | [对外发布文档](./docs/index.html)（浏览器打开） | 使用+接入标准：原理、**数据安全模型**（无服务器/token 仅本地）、快速上手、API 速查、格式契约、AI 接入 |
 | 🤖 | [llms.txt](./docs/llms.txt) | AI/Agent 接入标准（llmstxt.org 规范）：心智模型、安全事实、Agent 硬规则、最小代码、文档地图 |
 
@@ -68,4 +80,4 @@ TypeScript + isomorphic-git（跨 Node / 浏览器 / Electron），pnpm monorepo
 
 ## 状态
 
-设计阶段（2026-08）。下一步：搭 MVP v0.1 骨架（GitHub 单平台 + 文档 CRUD + 配额管理 + CLI）。
+v0.1 MVP 已完成（含真实 GitHub E2E 用户验证）。当前在 v0.2 引擎能力轨（[docs/14](./docs/14-engine-parity-sqlite.md)）：P1 范围索引/增量 diff/增量 pull、P2 计划器+复合索引+聚合管道、P3 SAVEPOINT+字段级加密均已落地；下一个是 P4 本地 SQLite 索引后端。实时进度以 [docs/progress.md](./docs/progress.md) 为准。

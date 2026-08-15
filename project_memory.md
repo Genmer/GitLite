@@ -1,6 +1,7 @@
-# GitLite 项目记忆
+# GitLite 项目记忆（设计期存档）
 
 > 项目级规则、约束、约定与设计决策。适用于当前项目 GitLite 的所有会话。
+> ⚠️ 2026-08-16 起本文转为存档：AI 协作入口见 [AGENTS.md](./AGENTS.md)，进度唯一入口见 [docs/progress.md](./docs/progress.md)；本文与 docs/ 冲突时以 docs/ 为准。
 
 ## 项目定位
 
