@@ -1,0 +1,29 @@
+{
+  "name": "@gitlite/ui",
+  "version": "0.1.0",
+  "description": "GitLite ui — 内置向导与绑定管理组件",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "dependencies": {
+    "@gitlite/core": "0.1.0",
+    "@gitlite/sdk": "0.1.0",
+    "@gitlite/adapters-node": "0.1.0"
+  }
+}
