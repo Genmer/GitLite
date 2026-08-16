@@ -6,7 +6,8 @@ import {
 import type {
   CreateRepoInput, FileChange, RepoInfo, RepoRef
 } from '../types.js';
-import type { GitProvider } from './memory.js';
+import type { ChangedFiles, GitProvider } from './memory.js';
+import { rateLimitBackoffMs } from './rate-limit.js';
 
 const API = 'https://api.github.com';
 
@@ -35,12 +36,13 @@ export class GitHubProvider implements GitProvider {
     if (res.status === 204) return { status: 204, data: null };
     const data = (await res.json().catch(() => null)) as T | null;
     if (res.status === 401) throw new AuthError('github token invalid or expired');
+    // 限流精确解析（次级限流 429 带 Retry-After；主限流 403 + remaining=0/Retry-After）
+    if (res.status === 429) {
+      throw new RateLimitError(rateLimitBackoffMs(res.headers) ?? 60_000);
+    }
     if (res.status === 403) {
-      const remaining = res.headers.get('x-ratelimit-remaining');
-      if (remaining === '0') {
-        const reset = Number(res.headers.get('x-ratelimit-reset') ?? 0) * 1000;
-        throw new RateLimitError(Math.max(reset - Date.now(), 1000));
-      }
+      const backoff = rateLimitBackoffMs(res.headers);
+      if (backoff !== null) throw new RateLimitError(backoff);
       throw new AuthError(`github 403: ${JSON.stringify(data)?.slice(0, 200)}`);
     }
     if (res.status === 422) {
@@ -84,6 +86,11 @@ export class GitHubProvider implements GitProvider {
     return (data ?? []).map(b => b.name);
   }
 
+  async deleteBranch(ref: RepoRef, name: string): Promise<void> {
+    // DELETE /git/refs/heads/<branch>；404 = 不存在（幂等）
+    await this.req('DELETE', `/repos/${ref.owner}/${ref.repo}/git/refs/heads/${encodeURIComponent(name)}`);
+  }
+
   async getHead(ref: RepoRef, branch: string): Promise<string | null> {
     const { status, data } = await this.req<any>('GET',
       `/repos/${ref.owner}/${ref.repo}/git/ref/heads/${encodeURIComponent(branch)}`);
@@ -105,21 +112,47 @@ export class GitHubProvider implements GitProvider {
   }
 
   async getFiles(ref: RepoRef, branch: string): Promise<Map<string, string> | null> {
+    const base = `/repos/${ref.owner}/${ref.repo}`;
     const { status, data } = await this.req<any>('GET',
-      `/repos/${ref.owner}/${ref.repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
+      `${base}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
     if (status === 404 || !data) return null;
     const out = new Map<string, string>();
     for (const entry of data.tree ?? []) {
       if (entry.type !== 'blob') continue;
-      const blob = await this.req<any>('GET',
-        `/repos/${ref.owner}/${ref.repo}/git/blobs/${entry.sha}`);
+      const blob = await this.req<any>('GET', `${base}/git/blobs/${entry.sha}`);
       out.set(entry.path, decodeBlob(blob?.data?.content ?? '', blob?.data?.encoding ?? 'base64'));
     }
     return out;
   }
 
+  /** P1c 增量拉取：树一次比对（1 调用），仅拉变更/新增 blob → 流量降 ~99%。
+   *  prevTree=null → 全量。分支不存在返回 null。 */
+  async getChangedFiles(ref: RepoRef, branch: string, prevTree: Map<string, string> | null):
+    Promise<ChangedFiles | null> {
+    const base = `/repos/${ref.owner}/${ref.repo}`;
+    const { status, data } = await this.req<any>('GET',
+      `${base}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
+    if (status === 404 || !data) return null;
+    const tree = new Map<string, string>();
+    const shaOf = new Map<string, string>();
+    const want: string[] = [];                       // 需拉取内容的 path
+    for (const entry of data.tree ?? []) {
+      if (entry.type !== 'blob') continue;
+      tree.set(entry.path, entry.sha);
+      shaOf.set(entry.path, entry.sha);
+      if (prevTree === null || prevTree.get(entry.path) !== entry.sha) want.push(entry.path);
+    }
+    const deleted = prevTree === null ? [] : [...prevTree.keys()].filter(p => !tree.has(p));
+    const files = new Map<string, string>();
+    for (const p of want) {
+      const blob = await this.req<any>('GET', `${base}/git/blobs/${shaOf.get(p)}`);
+      files.set(p, decodeBlob(blob?.data?.content ?? '', blob?.data?.encoding ?? 'base64'));
+    }
+    return { files, deleted, tree };
+  }
+
   async commit(ref: RepoRef, branch: string, message: string,
-               changes: FileChange[], expectedHeadOid?: string): Promise<{ oid: string }> {
+               changes: FileChange[], expectedHeadOid?: string): Promise<{ oid: string; tree?: Map<string, string> }> {
     const base = `/repos/${ref.owner}/${ref.repo}`;
 
     // 1. base commit / tree
@@ -141,10 +174,14 @@ export class GitHubProvider implements GitProvider {
       }
     }
 
-    // 3. tree（base_tree 复用未变部分）
+    // 3. tree（base_tree 复用未变部分）；响应含解析后的全树 → 增量追踪用
     const tree = await this.req<any>('POST', `${base}/git/trees`, {
       base_tree: baseTree, tree: treeItems
     });
+    const remoteTree = new Map<string, string>();
+    for (const t of tree.data?.tree ?? []) {
+      if (t.type === 'blob') remoteTree.set(t.path, t.sha);
+    }
 
     // 4. commit + 5. ref 更新（CAS：expected sha 不符 → 422 → ConflictError）
     const commit = await this.req<any>('POST', `${base}/git/commits`, {
@@ -160,7 +197,7 @@ export class GitHubProvider implements GitProvider {
       }
       throw e;
     }
-    return { oid: commit.data?.sha };
+    return { oid: commit.data?.sha, tree: remoteTree };
   }
 }
 

@@ -70,4 +70,35 @@ describe('GitHubProvider（FR B5 错误映射 / Git DB 四步 commit）', () => 
     const f403 = mockFetch([{ match: () => true, status: 403, body: { message: 'rate' }, headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '9999999999' } }]);
     await expect(new GitHubProvider('t', f403).getRepo(ref)).rejects.toBeInstanceOf(RateLimitError);
   });
+
+  it('限流精确解析：429+Retry-After / 403+Retry-After（次级限流）/ 403 纯权限 → AuthError', async () => {
+    // 429 + Retry-After（GitHub 次级限流标准形态）
+    const f429 = mockFetch([{ match: () => true, status: 429, body: {}, headers: { 'retry-after': '30' } }]);
+    const e1 = await new GitHubProvider('t', f429).getRepo(ref).catch(e => e);
+    expect(e1).toBeInstanceOf(RateLimitError);
+    expect(e1.retryAfterMs).toBe(30_000);
+
+    // 403 + Retry-After（abuse 限流）→ RateLimit 而非 AuthError
+    const f403ra = mockFetch([{ match: () => true, status: 403, body: {}, headers: { 'retry-after': '60' } }]);
+    const e2 = await new GitHubProvider('t', f403ra).getRepo(ref).catch(e => e);
+    expect(e2).toBeInstanceOf(RateLimitError);
+    expect(e2.retryAfterMs).toBe(60_000);
+
+    // 403 无限流特征 → 权限错误
+    const f403plain = mockFetch([{ match: () => true, status: 403, body: { message: 'Resource not accessible' } }]);
+    await expect(new GitHubProvider('t', f403plain).getRepo(ref)).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it('deleteBranch：DELETE refs 端点；404 幂等通过', async () => {
+    const f = mockFetch([
+      { match: (m, p) => m === 'DELETE' && p.includes('/git/refs/heads/gitlite/x'), status: 204 }
+    ]);
+    await expect(new GitHubProvider('t', f).deleteBranch!(ref, 'gitlite/x')).resolves.toBeUndefined();
+    expect(f.calls[0]![0]).toBe('DELETE');
+
+    const f404 = mockFetch([
+      { match: () => true, status: 404, body: { message: 'Reference does not exist' } }
+    ]);
+    await expect(new GitHubProvider('t', f404).deleteBranch!(ref, 'gitlite/gone')).resolves.toBeUndefined();
+  });
 });
