@@ -138,19 +138,140 @@ async function main(): Promise<void> {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>GitLite · 引导配置</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
-         max-width: 720px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
-  h2, h3 { margin: 0.4em 0; }
-  button { cursor: pointer; margin: 2px 6px 2px 0; padding: 6px 14px; border-radius: 8px;
-           border: 1px solid #8886; background: #4f7cff1a; font-size: 14px; }
-  button:hover { background: #4f7cff33; }
-  input { padding: 6px 10px; border-radius: 8px; border: 1px solid #8888; font-size: 14px;
-          width: min(340px, 70vw); }
-  a { color: #4f7cff; word-break: break-all; }
-  code { background: #8882; padding: 2px 6px; border-radius: 6px; }
-  ol { padding-left: 1.2em; }
-  label { display: block; margin: 8px 0; }
+  :root {
+    --bg: #f4f5fa; --bg-grad: radial-gradient(1200px 500px at 50% -100px, #e4e9ff66, transparent);
+    --card: #ffffff; --text: #16181d; --muted: #6b7280; --border: #e5e7eb; --border-soft: #eceef3;
+    --accent: #4f46e5; --accent-2: #6366f1; --accent-weak: #eef0ff; --accent-ring: #4f46e533;
+    --ok: #0a7d43; --ok-weak: #e7f7ef; --bad: #b42318; --bad-weak: #feeceb;
+    --mono-bg: #f8f9fc; --shadow: 0 1px 2px #10182a0d, 0 8px 24px #10182a0f;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1015; --bg-grad: radial-gradient(1200px 500px at 50% -100px, #4f46e526, transparent);
+      --card: #171a21; --text: #e8eaf0; --muted: #9aa1ad; --border: #262b36; --border-soft: #20242e;
+      --accent: #818cf8; --accent-2: #a5b4fc; --accent-weak: #4f46e526; --accent-ring: #818cf844;
+      --ok: #4ade80; --ok-weak: #0a7d4326; --bad: #f87171; --bad-weak: #b4231826;
+      --mono-bg: #10131a; --shadow: 0 1px 2px #00000066, 0 8px 24px #00000066;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); background-image: var(--bg-grad);
+    color: var(--text); line-height: 1.65;
+    font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
+
+  /* 品牌头部 */
+  .page-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+  .page-logo {
+    width: 44px; height: 44px; border-radius: 12px; flex: none;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff; font-weight: 800; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 16px var(--accent-ring);
+  }
+  .page-title { font-size: 22px; font-weight: 700; letter-spacing: .2px; margin: 0; }
+  .page-tag { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+
+  /* 卡片 */
+  .gl-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 26px 26px 22px; box-shadow: var(--shadow); margin-bottom: 18px;
+  }
+  .gl-title { margin: 0 0 6px; font-size: 17px; }
+  .gl-sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
+  .gl-center { text-align: center; padding: 44px 20px; color: var(--muted); }
+  .gl-done { color: var(--ok); font-size: 18px; font-weight: 700; }
+
+  /* 平台行 */
+  .gl-platform { border: 1px solid var(--border-soft); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
+  .gl-platform-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .gl-platform-name { font-size: 15.5px; }
+  .gl-pills { display: inline-flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .gl-mark { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+    border-radius: 10px; background: var(--mono-bg); color: var(--text); flex: none; }
+  .gl-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 11px;
+    border-radius: 999px; white-space: nowrap; }
+  .gl-pill-ok { background: var(--ok-weak); color: var(--ok); }
+  .gl-pill-no { background: var(--mono-bg); color: var(--muted); }
+
+  /* 按钮 */
+  .gl-btn {
+    cursor: pointer; font: inherit; font-size: 13.5px; line-height: 1;
+    padding: 10px 18px; border-radius: 10px; border: 1px solid transparent;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  .gl-btn:active { transform: translateY(1px); }
+  .gl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .gl-btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 12px var(--accent-ring); }
+  .gl-btn-primary:hover { background: var(--accent-2); }
+  .gl-btn-secondary { background: var(--card); color: var(--accent); border-color: var(--accent); }
+  .gl-btn-secondary:hover { background: var(--accent-weak); }
+  .gl-btn-ghost { background: transparent; color: var(--muted); }
+  .gl-btn-ghost:hover { color: var(--text); background: var(--mono-bg); }
+  .gl-btn-mini { padding: 5px 12px; font-size: 12.5px; border-radius: 8px;
+    background: var(--accent-weak); color: var(--accent); }
+  .gl-btn-mini:hover { background: var(--accent); color: #fff; }
+  .gl-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .gl-foot { margin-top: 6px; text-align: center; }
+
+  /* 平台大选项 */
+  .gl-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .gl-choice {
+    cursor: pointer; font: inherit; font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 22px 12px; border-radius: 14px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text);
+  }
+  .gl-choice:hover { border-color: var(--accent); background: var(--accent-weak); }
+
+  /* 步骤列表 / 回调地址框 */
+  .gl-steps { margin: 0 0 16px; padding: 0; list-style: none; counter-reset: step; }
+  .gl-steps li { counter-increment: step; position: relative; padding: 0 0 14px 38px; font-size: 14px; }
+  .gl-steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 1px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent-weak); color: var(--accent);
+    font-size: 12.5px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .gl-steps li:not(:last-child)::after {
+    content: ""; position: absolute; left: 12px; top: 28px; bottom: 2px; width: 1px; background: var(--border);
+  }
+  .gl-callback {
+    display: flex; align-items: center; gap: 10px; margin-top: 8px;
+    background: var(--mono-bg); border: 1px dashed var(--accent); border-radius: 10px; padding: 9px 12px;
+  }
+  .gl-callback code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .gl-link { color: var(--accent); word-break: break-all; text-decoration-color: var(--accent-ring); text-underline-offset: 3px; }
+  .gl-link:hover { text-decoration: none; background: var(--accent-weak); }
+
+  /* 表单 */
+  .gl-form { display: grid; gap: 4px; }
+  .gl-field { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+  .gl-input {
+    font: inherit; font-size: 14px; padding: 10px 13px; width: 100%;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text);
+  }
+  .gl-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+  .gl-input::placeholder { color: var(--muted); opacity: .6; }
+
+  /* 提示 / 错误 / 进度 */
+  .gl-hintbox {
+    background: var(--accent-weak); border-radius: 10px; padding: 12px 14px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; margin: 0 0 4px;
+  }
+  .gl-error { border-color: var(--bad); }
+  .gl-errmsg { color: var(--bad); font-size: 14px; margin: 0 0 4px; }
+  .gl-progress { color: var(--muted); margin: 10px 0 0; font-size: 13.5px; }
+  .gl-spinner {
+    width: 18px; height: 18px; border-radius: 50%; display: inline-block; vertical-align: -4px; margin-right: 8px;
+    border: 2.5px solid var(--accent-ring); border-top-color: var(--accent);
+    animation: gl-spin .8s linear infinite;
+  }
+  @keyframes gl-spin { to { transform: rotate(360deg); } }
 </style>
 <script>
   window.addEventListener('error', function (e) {
@@ -159,7 +280,19 @@ async function main(): Promise<void> {
   });
 </script>
 </head>
-<body><div id="root">加载中…</div><script type="module" src="/app.js"></script></body></html>`;
+<body>
+<main>
+  <header class="page-header">
+    <div class="page-logo">G</div>
+    <div>
+      <h1 class="page-title">GitLite</h1>
+      <p class="page-tag">引导配置 · GitHub / Gitee 绑定</p>
+    </div>
+  </header>
+  <div id="root">加载中…</div>
+</main>
+<script type="module" src="/app.js"></script>
+</body></html>`;
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`);
