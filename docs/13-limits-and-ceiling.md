@@ -97,18 +97,19 @@
 4. client_id 转正（待用户提供，写进常量替换占位符）
 5. npm pack 预检（实际发布需用户 npm 账号）
 
-### P1 · v0.2 性能三优化（消除 v0.1 直白实现的三大 O(全仓库) 浪费，API 零变化）
-6. **脏集合增量 diff**：写路径记 dirty collection，flush 只导出脏表 → O(全仓库) 变 O(改动)
-7. **pull 增量化**：tree sha 一次比对，仅拉变更 blob（GitHub compare API）→ 流量降 ~99%
-8. **索引范围扫描**：entries 按 key 排序 + 二分查找，`$gt/$lt` 走索引
+### P1 · v0.2 性能三优化（✅ 全部落地，消除 v0.1 直白实现的三大 O(全仓库) 浪费，API 零变化）
+6. ✅ **脏集合增量 diff**（P1b）：写路径记 dirty collection，flush 只导出脏表（含 schema/索引按表过滤）→ O(全仓库) 变 O(改动)；删除仅限脏表自有文件，clean 表与用户文件零触碰
+7. ✅ **pull 增量化**（P1c）：新增 `getChangedFiles?` 原语——树一次比对（1 调用），仅拉变更/新增 blob + 删除清单 → 流量降 ~99%；`commit` 返回新树作 remoteTree 增量基准；无增量能力时自动降级全量
+8. ✅ **索引范围扫描**（P1a）：entries 类型感知排序 + 二分查找，`$gt/$gte/$lt/$lte` 走索引；等值/范围条件自动分流
 
-### P2 · v0.2 功能
-9. Gitee Provider（OAuth+PKCE+loopback 固定端口；无 Git DB API → 批量提交降级策略）
-10. OS 凭据库（Windows 凭据管理器/Keychain，替代 0600 文件）
-11. CLI REPL + 限流响应头精确解析
+### P2 · v0.2 功能（✅ 全部落地；Gitee OAuth 真机 E2E 与 GitHub 一样待用户实测）
+9. ✅ Gitee Provider + OAuth（Contents 降级提交 + 目录列表增量拉取 + CAS 预检 + 授权码/loopback 登录；loopback 服务在 adapters-node，core 接口零扩张）
+10. ✅ OS 凭据库（已落地：零原生依赖——darwin=security CLI / linux=secret-tool（stdin 传密）/ 其余文件回退；ENOENT 粘性降级；`createNodeRuntime({ credential: 'os' })` 选入，默认 file 兼容 v0.1）
+11. ✅ CLI REPL（已落地：JS 求值 + 点命令 + 多行 + 补全（点命令/collection/方法/**字段名/$ 操作符**）+ 历史）+ ✅ 限流响应头精确解析（已落地：`provider/rate-limit.ts` 共享——Retry-After 秒/HTTP-date 优先，次 X-RateLimit-Remaining=0+Reset；429 与可识别限流头的 403 → 精确 RateLimitError.retryAfterMs，无特征 403 → AuthError 不误报）
 
 ### P3 · v0.3+（对照路线图 docs/10）
 12. 格式冻结 1.0.0 + `@gitlite/ui` 向导 + Codegen + 聚合管道 + 复合索引
-13. v0.4 长事务+字段加密；v0.5 多绑定 failover + SQLite 索引后端（补"分页缓存"层）；v0.6 浏览器/移动端
+13. v0.5 多绑定 failover；v0.6 浏览器/移动端（长事务 SAVEPOINT / 字段级加密 / SQLite 索引后端均已提前至 v0.2 落地——见 docs/14 P3/P4）
 
 > 校准说明：原设计文档 08 的"SQLite 本地索引后端"从 v0.5 提到 P3 关注项——它是突破"全内存假设"的唯一路径（数据 > 内存时本地 SQLite 做索引/分页，仓库只存冷数据），容量舒适区可从 50 万行推向百万行级。
+> ✅ 已落地（v0.2 P4）：`indexBackend: 'sqlite'`（经 RuntimeAdapter.sqlite 注入 node:sqlite 等同步实现），索引条目落盘 + docHash 指纹跳重建 + 渲染缓存零写入快路径；仓库仍为唯一事实源（ADR-002，_indexes/*.idx.json 格式不变）。

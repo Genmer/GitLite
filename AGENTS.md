@@ -51,14 +51,17 @@
 
 > ⚠️ 快照会过期，**一律以 [docs/progress.md](docs/progress.md) 为准**。
 
-- 能力轨（docs/14）：P1a 范围索引 ✅｜P1b 脏集合增量 diff ✅｜P1c pull 增量化 ✅｜P2 计划器+explain ✅｜P2 复合索引 ✅｜P2 聚合管道 ✅｜P3 长事务 SAVEPOINT ✅｜P3 字段级加密 ✅｜**P4 本地 SQLite 索引后端 ⬜（下一个）**
-- 功能轨（docs/13）：Gitee Provider、OS 凭据库、CLI REPL（v0.2）；格式冻结 1.0.0（v0.3）
-- 门禁：120 测试全绿，覆盖率 lines 89.99%，tsc 0，golden 快照未破坏
+- 能力轨（docs/14）：P1a→P4 全部 ✅（内圈补齐序列收官）
+- 功能轨（docs/13）v0.2：全部 ✅；v0.3：格式冻结 1.0.0 ✅（ADR-002 已执行，golden-v1.0 基线）、Codegen ✅、@gitlite/react + @gitlite/ui ✅
+- **全部规划内可实现项已完成**（7 包：core/adapters-node/codegen/react/ui/sdk/cli）；剩余仅物理依赖用户的事项（见下）
+- 门禁：188 测试全绿（31 文件），覆盖率 lines 91.48%，7 包 build/typecheck 0 错，golden v1.0 冻结基线稳定
 
-**下一个任务（P4）提示**：本地 SQLite 索引后端是内圈唯一「换部件」项——突破「全内存镜像」假设，数据 > 内存时本地 SQLite 做索引/分页，仓库只存冷数据。注意 core 零 node 依赖约束（sqlite 能力须经 RuntimeAdapter 注入）与 ADR-002 格式兼容。
+**醒来后只剩三件物理上无法代做的事**：① Gitee OAuth 真机 E2E（需用你的 Gitee 账号注册 OAuth App，回调填 `http://127.0.0.1:18365/callback`）；② mac/linux 真钥匙串验证（security/secret-tool CLI 实测，本机是 Windows）；③ review + commit（全部代码在工作区未提交，与之前的未提交改动并存）。
 
 ## 6. 已知坑（历史教训，勿重踩）
 
 - **markSynced 竞态**：flush 期间晚到写入会被误标已同步吞掉——现为增量基线 + 仅清「基线已与镜像一致」集合的脏标记。改同步逻辑时保持此语义。
 - **decryptFiles 依赖 schema**，但它运行在 importFiles（schema 加载）之前——现自行从 `_schema/` 解析加密字段。
 - **putSchema 的 `void flush()` 是吞写源头**——已改走 `schedule()` 统一调度；不要恢复后台裸 flush。
+- **跨包类型走 dist**：改 core 的类型/导出后，`npm run typecheck` 前先 `npm run build`——adapters-node/sdk 解析 `@gitlite/core` 的类型用的是 dist 声明（vitest 走 src 别名，测试绿 ≠ typecheck 绿）。
+- **manager 的 guard 会吞存储异常**（by design，H2 降级）：调试 SQLite 后端时用裸 `SqliteIndexStore` 复现，别隔着 IndexManager 看不到真实错误。

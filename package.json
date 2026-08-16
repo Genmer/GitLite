@@ -9,14 +9,21 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w packages/core -w packages/adapters-node -w packages/sdk -w packages/cli",
-    "test": "npm run test -w packages/core -w packages/sdk -w packages/cli",
-    "test:core": "npm run test -w packages/core",
-    "typecheck": "tsc -b packages/core packages/adapters-node packages/sdk packages/cli"
+    "build": "npm run build -w packages/core && npm run build -w packages/adapters-node && npm run build -w packages/codegen && npm run build -w packages/react && npm run build -w packages/ui && npm run build -w packages/sdk && npm run build -w packages/cli",
+    "test": "npx vitest run",
+    "test:core": "npx vitest run --coverage",
+    "typecheck": "npx tsc -p packages/core --noEmit && npx tsc -p packages/adapters-node --noEmit && npx tsc -p packages/codegen --noEmit && npx tsc -p packages/react --noEmit && npx tsc -p packages/ui --noEmit && npx tsc -p packages/sdk --noEmit && npx tsc -p packages/cli --noEmit",
+    "pack:check": "cd packages/core && npm pack --dry-run && cd ../.. && cd packages/sdk && npm pack --dry-run && cd ../.."
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20.14.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "@vitest/coverage-v8": "^2.1.9",
+    "jsdom": "^30.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tsx": "^4.23.12",
     "typescript": "^5.6.3",
     "vitest": "^2.1.9"

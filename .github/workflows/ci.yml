@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 24]
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: |
+          npx tsc -p packages/core --noEmit
+          npx tsc -p packages/adapters-node --noEmit
+          npx tsc -p packages/sdk --noEmit
+          npx tsc -p packages/cli --noEmit
+      - name: Test (coverage + golden snapshot)
+        run: npx vitest run --coverage
+
+  # 黄金仓库快照是格式宪法（ADR-002）的机器执行：
+  # export 与基线逐字节一致，防止无意中改格式
+  format-constitution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Golden snapshot must reproduce byte-for-byte
+        run: npx vitest run packages/core/src/golden.test.ts

@@ -276,14 +276,18 @@ Index Scan: users.age_name
 - 游标分页配合索引：`cursor` 编码最后一条的索引 key，下次扫描从 key 之后开始，避免 skip。
 - offset 分页在索引上仍需扫描前 N 条，但比全表快。
 
-## 六、本地 SQLite 索引后端（可选）
+## 六、本地 SQLite 索引后端（✅ v0.2 P4 已落地）
+
+> 实现与下述设计一致，接口细节按落地形态修订：`IndexStore` 双后端（内存=默认零回归 / SQLite=可选），
+> `RuntimeAdapter.sqlite?: SqliteAdapterFactory` 注入同步 SQLite 能力（Node 走 `node:sqlite`，
+> 见 `adapters-node` 的 `createNodeSqlite()`；无法提供的宿主自动回退纯内存）。
 
 对大数据量（>10k docs）或复杂查询，把索引从 JSON 文件升级到本地 SQLite：
 
 ```ts
-const db = await GitLite.connect({
+const db = await connect({
   // ...
-  indexBackend: 'sqlite'   // 默认 'json'
+  indexBackend: 'sqlite'   // 默认 'memory'
 });
 ```
 
@@ -310,12 +314,13 @@ CREATE UNIQUE INDEX idx_users_email ON users_data(email);
 CREATE INDEX idx_users_age_name ON users_data(age, name);
 ```
 
-### 同步规则
+### 同步规则（落地实现）
 
-- **数据源仍是 Git 仓库**：SQLite 只是本地索引/缓存，不作为 source of truth。
-- **远端变更触发重建**：pull 后 diff，增量更新 SQLite 行。
-- **本地写同步更新 SQLite**：写 Mirror 时同步写 SQLite。
-- **SQLite 损坏可重建**：删 `cache.db`，下次启动从远端全量重建。
+- **数据源仍是 Git 仓库**：SQLite 只是本地索引/缓存，不作为 source of truth——`_indexes/*.idx.json` 照常随数据 commit（ADR-002 格式不变）。
+- **远端变更触发重建**：pull 后按「XOR 文档指纹」比对，未变集合跳过全量重建（重启/未变 pull 为 O(未变)）。
+- **本地写同步更新 SQLite**：onWrite 事务化增删行，并增量维护指纹（可交换 XOR 累积）。
+- **SQLite 损坏可重建**：删 `index.db`，下次启动 importFiles + rebuild 全量重建；运行期故障自动降级全表扫描（H2）。
+- **渲染缓存**：idx.json 内容缓存于库内，flush 只重渲染脏表索引（P1b 语义在 SQLite 后端延续）；未变重启零写入。
 
 ### 性能对比
 
