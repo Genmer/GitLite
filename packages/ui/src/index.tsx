@@ -220,6 +220,8 @@ export interface SetupFlows extends WizardFlows {
   saveOAuth(provider: WizardProvider, creds: { clientId: string; clientSecret?: string }): Promise<void>;
   /** PAT：getUser 校验 → 存凭据库；返回 owner；校验失败抛错 */
   savePat(provider: WizardProvider, token: string): Promise<string>;
+  /** 取已存的登录 token（「直接连接」入口用；浏览器宿主 token 在服务端可返回标记） */
+  getStoredToken?(provider: WizardProvider): Promise<string | null>;
 }
 
 /** 默认引导流程（Node/桌面宿主） */
@@ -239,6 +241,9 @@ export const nodeSetupFlows: SetupFlows = {
     const runtime = createNodeRuntime();
     await runtime.credential.set(`gitlite:${provider}:default`, token);
     return login;
+  },
+  async getStoredToken(provider) {
+    return await createNodeRuntime().credential.get(`gitlite:${provider}:default`);
   }
 };
 
@@ -327,6 +332,18 @@ export function GitLiteSetup(props: {
     }
   };
 
+  /** 已登录平台的「直接连接」：取存量 token + 识别 owner → 直达仓库配置步 */
+  const connectNow = async (p: WizardProvider): Promise<void> => {
+    try {
+      const token = (await flows.getStoredToken?.(p)) ?? 'stored';
+      const owner = await flows.identity(p, token).catch(() => null);
+      setWizardInit({ provider: p, token, owner: owner ?? '' });
+      setPhase('wizard');
+    } catch (e: any) {
+      fail(String(e?.message ?? e), 'choose');
+    }
+  };
+
   const badge = (ok: boolean, label: string) => (
     <span className={`gl-pill ${ok ? 'gl-pill-ok' : 'gl-pill-no'}`}>{ok ? '✅' : '⬜'} {label}</span>
   );
@@ -356,7 +373,12 @@ export function GitLiteSetup(props: {
                 )}
               </div>
               <div className="gl-actions">
-                {status && status[p].oauthApp && !status[p].token ? (
+                {status && status[p].token ? (
+                  <>
+                    <button className="gl-btn gl-btn-primary" data-testid={`setup-connect-${p}`} onClick={() => void connectNow(p)}>连接 {PLATFORM_NAME[p]}</button>
+                    <button className="gl-btn gl-btn-secondary" data-testid={`setup-pat-${p}`} onClick={() => { setProvider(p); setPat(''); setPhase('pat'); }}>使用私人令牌</button>
+                  </>
+                ) : status && status[p].oauthApp ? (
                   <>
                     <button className="gl-btn gl-btn-primary" data-testid={`setup-login-${p}`} onClick={() => { setWizardInit({ provider: p }); setPhase('wizard'); }}>登录 {PLATFORM_NAME[p]}</button>
                     <button className="gl-btn gl-btn-secondary" data-testid={`setup-pat-${p}`} onClick={() => { setProvider(p); setPat(''); setPhase('pat'); }}>使用私人令牌</button>

@@ -58,7 +58,12 @@ describe('GitLiteSetup（引导配置）', () => {
   });
 
   it('GitHub OAuth 引导：无 secret 输入、回调说明为 Device Flow', async () => {
-    const flows = stubSetupFlows();
+    const flows = stubSetupFlows({
+      detect: vi.fn(async () => ({
+        github: { oauthApp: false, token: false }, // 全新状态 → 展示「登记」入口
+        gitee: { oauthApp: false, token: false }
+      }))
+    });
     render(<GitLiteSetup onReady={() => {}} flows={flows} />);
     await waitFor(() => expect(screen.getByTestId('setup-choose')).toBeTruthy());
     await act(async () => { fireEvent.click(screen.getByTestId('setup-oauth-github')); });
@@ -127,5 +132,21 @@ describe('GitLiteSetup（引导配置）', () => {
     await act(async () => { fireEvent.click(screen.getByTestId('setup-login-gitee')); });
     await waitFor(() => expect(screen.getByTestId('wizard-login')).toBeTruthy()); // 直达 gitee 登录步
     expect(screen.getByTestId('wizard-login').textContent).toContain('Gitee');
+  });
+
+  it('已登录平台 → 「连接」主按钮直达仓库配置步（token+owner 预填）', async () => {
+    const flows = stubSetupFlows({
+      detect: vi.fn(async () => ({
+        github: { oauthApp: false, token: false },
+        gitee: { oauthApp: true, token: true }
+      })),
+      getStoredToken: vi.fn(async () => 'stored-token-x')
+    });
+    render(<GitLiteSetup onReady={() => {}} flows={flows} />);
+    await waitFor(() => expect(screen.getByTestId('setup-choose')).toBeTruthy());
+    await act(async () => { fireEvent.click(screen.getByTestId('setup-connect-gitee')); });
+    await waitFor(() => expect(screen.getByTestId('wizard-config')).toBeTruthy());
+    expect((screen.getByTestId('wizard-owner') as HTMLInputElement).value).toBe('alice'); // identity 预填
+    expect(flows.getStoredToken).toHaveBeenCalledWith('gitee');
   });
 });

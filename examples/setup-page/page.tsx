@@ -83,6 +83,9 @@ const remoteFlows: SetupFlows = {
     });
     return login;
   },
+  async getStoredToken() {
+    return 'server-side'; // 浏览器侧拿不到也不需要真实 token（/api/connect 用服务端凭据库）
+  },
   async login(provider, onCode) {
     return await loginViaApi(provider, onCode);
   },
