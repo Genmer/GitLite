@@ -27,7 +27,7 @@ describe('存储引擎：行级分层 + diff（FR D3/A4）', () => {
     expect(files.has('cfg.jsonl')).toBe(true);
     expect(files.has(SYS.configPath)).toBe(true);          // bootstrap（A5）
     expect(files.has(SYS.headPath)).toBe(true);            // 冻结结构
-    expect(files.get(SYS.configPath)).toContain('"0.1.0"');
+    expect(files.get(SYS.configPath)).toContain('"1.0.0"'); // 冻结格式版本（ADR-002）
     void runtime;
   });
 
@@ -122,12 +122,12 @@ describe('仓库检查三态（FR A4/D6）', () => {
     expect(files.has(SYS.configPath)).toBe(true);   // 只添加系统文件
   });
 
-  it('formatVersion 门禁：repo major 更新则拒绝打开（D6）', async () => {
+  it('formatVersion 门禁：repo major 更新则拒绝打开（D6；1.0.0 冻结 → 2.x 为未来版）', async () => {
     const provider = new MemoryProvider();
     const ref = { owner: 'test', repo: 'future' };
     await provider.createRepo(ref, { private: true });
     await provider.commit(ref, 'main', 'init', [
-      { kind: 'put', path: SYS.configPath, content: JSON.stringify({ formatVersion: '1.0.0' }) }
+      { kind: 'put', path: SYS.configPath, content: JSON.stringify({ formatVersion: '2.0.0' }) }
     ]);
     await provider.createBranch(ref, 'gitlite/default', 'main');
     await expect(GitLiteClient.create({

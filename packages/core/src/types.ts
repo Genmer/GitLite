@@ -84,7 +84,9 @@ export const SYS = {
   metaDir: '_meta',
   headPath: '_meta/head.json',
   dbBranchPrefix: 'gitlite/',
-  formatVersion: '0.1.0',
+  /** 仓库格式契约版本（ADR-002）：1.0.0 = 冻结（additive-only 具约束力）；
+   *  读兼容策略：0.x 仓库可读（告警一次后继续）；2.x 仓库拒读（FormatVersionError）。 */
+  formatVersion: '1.0.0',
   clientVersion: '0.1.0',
 } as const;
 

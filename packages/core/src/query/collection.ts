@@ -9,6 +9,10 @@ import { computeRev } from '../model/rev.js';
 import type { Ulid } from '../model/ulid.js';
 import type { StorageEngine } from '../storage/engine.js';
 import type { CommitQueue } from '../sync/queue.js';
+import { select } from './planner.js';
+import type { QueryPlan } from './planner.js';
+import { aggregate } from './aggregate.js';
+import type { AggStage } from './aggregate.js';
 import type {
   DeleteResult, Document, Filter, FindOptions, Json, OptionalId,
   Page, Update, UpdateOptions, UpdateResult
@@ -167,13 +171,24 @@ export class Collection<T = any> {
     else if (mode === 'synced') await this.d.flushNow();
   }
 
-  /** 索引可用→候选集；否则全表（FR H2 降级） */
+  /** 索引可用→候选集（等值点查或范围扫描）；否则全表（FR H2 降级）。
+   *  访问路径由计划器（planner.ts）单一决策，explain 与之严格一致。 */
   private candidates(filter?: Filter): string[] {
-    if (filter) {
-      const eq = firstIndexedEq(this.d.indexMgr, this.name, filter);
-      if (eq) return eq;
-    }
-    return this.d.storage.scan(this.name).map(d => d._id);
+    const total = this.d.storage.scan(this.name).length;
+    const sel = select(this.d.indexMgr, total, this.name, filter);
+    return sel.ids ?? this.d.storage.scan(this.name).map(d => d._id);
+  }
+
+  /** 查询计划内省（P2：SQLite explain 对位）——访问路径/预估行数/选择性，与实际执行严格一致 */
+  async explain(filter?: Filter): Promise<QueryPlan> {
+    await this.consistency(undefined);
+    return select(this.d.indexMgr, this.d.storage.scan(this.name).length, this.name, filter).plan;
+  }
+
+  /** 聚合管道（P2：GROUP BY/聚合对位）：$match/$group/$sort/$skip/$limit/$project/$count */
+  async aggregate<T = any>(pipeline: AggStage[]): Promise<T[]> {
+    await this.consistency(undefined);
+    return aggregate(this.d.storage.scan(this.name), pipeline) as T[];
   }
 
   private targets(filter: Filter): string[] {
@@ -265,18 +280,6 @@ function project(doc: Document, projection?: Record<string, 0 | 1>): Document {
     for (const [k, v] of Object.entries(doc)) if (!exclude.includes(k)) out[k] = v;
   }
   return out;
-}
-
-/** 简单等值条件优先走索引 */
-function firstIndexedEq(indexMgr: IndexManager, c: string, filter: Filter): string[] | null {
-  for (const [k, v] of Object.entries(filter)) {
-    if (k.startsWith('$')) continue;
-    const value = (typeof v === 'object' && v !== null && '$eq' in (v as any))
-      ? (v as any).$eq : v;
-    const ids = indexMgr.candidates(c, k, value);
-    if (ids !== null) return ids;
-  }
-  return null;
 }
 
 /** upsert 种子：从 filter 提取无操作符的等值字段 */

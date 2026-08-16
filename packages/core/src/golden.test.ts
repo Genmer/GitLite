@@ -1,5 +1,5 @@
 // 黄金仓库快照（NFR-5 / M9）：格式稳定性回归基线。
-// 首次运行生成 fixtures/golden-v0.1.json；此后每次运行必须逐字节复现（_migrations 时间戳文件除外）。
+// v1.0.0 冻结基线（2026-08-16，ADR-002）：此后每次运行必须逐字节复现（_migrations 时间戳文件除外）。
 // 这是「格式宪法」的机器执行：additive-only 的最低保障。
 import { describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -9,7 +9,7 @@ import { MemoryProvider } from './provider/memory.js';
 import { GitLiteClient } from './client.js';
 import { createTestRuntime } from './test/runtime.js';
 
-const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures', 'golden-v0.1.json');
+const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '..', 'test-fixtures', 'golden-v1.0.json');
 
 // 固定 ID + 固定时间戳 → 快照稳定
 const fixedUsers = Array.from({ length: 55 }, (_, i) => ({

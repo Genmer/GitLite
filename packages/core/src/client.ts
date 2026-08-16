@@ -29,6 +29,11 @@ export interface ConnectOptions {
   queuePath?: string;
   /** foreign 仓库显式确认（FR A4） */
   allowForeignRepo?: boolean;
+  /** 字段级加密 passphrase（ADR-003）：提供则启用该库加密；缺省尝试凭据库缓存，未配置则明文（兼容） */
+  passphrase?: string;
+  /** 索引后端（P4，docs/14）：'memory'（默认，行为不变）/ 'sqlite'（本地分页缓存，
+   *  需 runtime.sqlite；缓存位于 ~/.gitlite/cache/<连接指纹>/index.db，可随时删除重建） */
+  indexBackend?: 'memory' | 'sqlite';
   /** 进度回调（向导 UI 双通道：内置 UI 与自建页面共用） */
   onProgress?: (step: ConnectStep, detail?: any) => void;
 }
@@ -36,7 +41,7 @@ export interface ConnectOptions {
 export class GitLiteClient {
   readonly bus = new EventBus();
   readonly storage = new StorageEngine();
-  readonly indexMgr = new IndexManager();
+  readonly indexMgr: IndexManager;
   readonly sync: SyncEngine;
   private queue: CommitQueue;
   private txMgr: TransactionManager;
@@ -48,9 +53,11 @@ export class GitLiteClient {
     readonly ref: RepoRef,
     readonly branch: string,
     private runtime: RuntimeAdapter,
-    private policy: SyncPolicy
+    private policy: SyncPolicy,
+    indexMgr: IndexManager
   ) {
-    const hash = `${provider.id}-${ref.owner}-${ref.repo}-${branch}`.replace(/[^a-z0-9.-]/gi, '_');
+    this.indexMgr = indexMgr;
+    const hash = connHash(provider.id, ref, branch);
     this.queue = new CommitQueue(runtime.fs, `~/.gitlite/queues/${hash}.json`); // adapters-node 展开 ~
     this.sync = new SyncEngine(provider, ref, branch, this.storage, this.indexMgr,
       this.queue, policy, new QuotaTracker(policy.maxRemoteCallsPerHour), this.bus, runtime);
@@ -58,8 +65,8 @@ export class GitLiteClient {
       () => this.collectionDeps(), this.storage, this.indexMgr, this.queue, this.bus,
       () => this.sync.flush()
     );
-    // 索引文件随数据同一 commit（FR H3）
-    this.storage.setIndexFilesProvider(() => this.indexMgr.exportFiles());
+    // 索引文件随数据同一 commit（FR H3）；脏集合过滤（P1b）
+    this.storage.setIndexFilesProvider((cols) => this.indexMgr.exportFiles(cols));
   }
 
   /** 连接编排（11 §3.1）：repo → branch → 探测/建 → 检查 → import → startup */
@@ -88,7 +95,27 @@ export class GitLiteClient {
       head = null;
     }
 
-    const client = new GitLiteClient(opts.provider, opts.ref, branch, opts.runtime, policy);
+    // P4：本地 SQLite 索引后端（可选；默认 memory 与 v0.2 前行为一致）
+    let mgr = new IndexManager();
+    if (opts.indexBackend === 'sqlite') {
+      const factory = opts.runtime.sqlite;
+      if (!factory) {
+        throw new Error('indexBackend "sqlite" requires runtime.sqlite (synchronous SQLite adapter; adapters-node provides createNodeSqlite() via node:sqlite)');
+      }
+      const dir = `~/.gitlite/cache/${connHash(opts.provider.id, opts.ref, branch)}`;
+      await opts.runtime.fs.mkdir(dir);
+      mgr = IndexManager.openSqlite(factory.open(`${dir}/index.db`));
+    }
+
+    const client = new GitLiteClient(opts.provider, opts.ref, branch, opts.runtime, policy, mgr);
+
+    // 字段级加密（ADR-003）：显式 passphrase 优先；否则尝试凭据库缓存；都无 → 明文（兼容）
+    const encKey = encCredKey(opts.provider.id, opts.ref.owner, opts.ref.repo, branch);
+    let passphrase = opts.passphrase ?? await opts.runtime.credential.get(encKey).catch(() => null) ?? undefined;
+    if (opts.passphrase) {
+      await opts.runtime.credential.set(encKey, opts.passphrase).catch(() => undefined); // 缓存免二次输入
+    }
+    client.sync.setPassphrase(passphrase);
 
     p?.('check-repo');
     const files = await opts.provider.getFiles(opts.ref, branch);
@@ -123,7 +150,7 @@ export class GitLiteClient {
     this.storage.putSchema(name, schema);
     this.indexMgr.registerSchema(name, schema);
     this.indexMgr.rebuild(name, this.storage.scan(name));
-    void this.sync.flush(); // schema 文件随下一次 commit 上远端（H3）
+    this.sync.schedule(); // 走统一调度（H3）；不做 void flush——避免与随后的写竞态被吞
   }
 
   on(event: string, fn: (e: any) => void): () => void {
@@ -134,6 +161,7 @@ export class GitLiteClient {
     if (this.closed) return;
     this.closed = true;
     await this.sync.close(); // F3 退出强制 flush
+    this.indexMgr.close();  // P4：SQLite 后端关库（WAL 落盘）
   }
 
   syncStatus() { return this.sync.status(); }
@@ -156,4 +184,14 @@ export class GitLiteClient {
   private assertOpen(): void {
     if (this.closed) throw new Error('client closed');
   }
+}
+
+/** 加密 passphrase 的凭据库键（ADR-003：按 provider/仓库/分支隔离） */
+function encCredKey(providerId: string, owner: string, repo: string, branch: string): string {
+  return `gitlite:enc:${providerId}:${owner}/${repo}:${branch}`;
+}
+
+/** 连接指纹（队列 / 索引缓存目录共用）：provider-owner-repo-branch → 文件系统安全 */
+function connHash(providerId: string, ref: RepoRef, branch: string): string {
+  return `${providerId}-${ref.owner}-${ref.repo}-${branch}`.replace(/[^a-z0-9.-]/gi, '_');
 }

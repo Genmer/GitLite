@@ -230,6 +230,23 @@ describe('事务（FR G1/G2）', () => {
   });
 });
 
+describe('databases.drop / deleteBranch（FR C1/C2）', () => {
+  it('建分支 → 删分支 → 再删幂等；列表不再包含', async () => {
+    const provider = new MemoryProvider();
+    const ref = { owner: 'test', repo: 'dr' };
+    await provider.createRepo(ref, { private: true, autoInit: true });
+    await provider.createBranch(ref, 'gitlite/a', 'main');
+    await provider.createBranch(ref, 'gitlite/b', 'main');
+    expect((await provider.listBranches(ref)).sort()).toEqual(['gitlite/a', 'gitlite/b', 'main']);
+
+    await provider.deleteBranch!(ref, 'gitlite/a');
+    expect(await provider.getHead(ref, 'gitlite/a')).toBeNull();
+    await provider.deleteBranch!(ref, 'gitlite/a'); // 幂等，不抛
+    expect((await provider.listBranches(ref)).filter(b => b === 'gitlite/a')).toEqual([]);
+    expect(await provider.getHead(ref, 'gitlite/b')).not.toBeNull(); // 不误伤
+  });
+});
+
 describe('ULID 与文档结构端到端', () => {
   it('_id/_rev/_schema 元字段齐备（D2/D4）', async () => {
     const { client, provider } = await makeClient();

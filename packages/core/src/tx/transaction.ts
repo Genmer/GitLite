@@ -1,4 +1,6 @@
-// 短事务（FR G1/G2）：txBuffer 覆盖层 → commit 批量应用 + 单次强制 flush（单 commit 原子）
+// 短/长事务（FR G1/G2）+ SAVEPOINT（P3：SQLite SAVEPOINT 对位）：
+// buffer 覆盖层 → commit 批量应用 + 单次强制 flush（单 commit 原子）；
+// savepoint/rollbackTo 支持长事务内部分回滚（纯本地，不破坏单 commit 原子性）
 import { ValidationError } from '../errors.js';
 import type { EventBus } from '../event.js';
 import type { StorageEngine } from '../storage/engine.js';
@@ -13,6 +15,13 @@ import type { Document } from '../types.js';
 interface TxCtxState {
   upserts: Map<string, { collection: string; doc: Document }>;
   deletes: Map<string, { collection: string; id: string }>;
+  /** SAVEPOINT 栈（P3）：每层保存当时 buffer 快照 */
+  savepoints: { name: string; upserts: Map<string, { collection: string; doc: Document }>;
+    deletes: Map<string, { collection: string; id: string }> }[];
+}
+
+function snapshotBuffer(state: TxCtxState): { upserts: TxCtxState['upserts']; deletes: TxCtxState['deletes'] } {
+  return { upserts: new Map(state.upserts), deletes: new Map(state.deletes) };
 }
 
 export class TransactionManager {
@@ -36,7 +45,7 @@ export class TransactionManager {
 
   async run<T>(fn: (tx: TransactionManager) => Promise<T>): Promise<T> {
     if (this.active) throw new ValidationError(['nested transaction not supported in v0.1']);
-    this.active = { upserts: new Map(), deletes: new Map() };
+    this.active = { upserts: new Map(), deletes: new Map(), savepoints: [] };
     try {
       const result = await fn(this);
       await this.commit();
@@ -45,6 +54,31 @@ export class TransactionManager {
       this.rollback();
       throw e;
     }
+  }
+
+  /** SAVEPOINT（P3）：保存当前 buffer 快照。同名 savepoint 隐式释放旧同名（SQLite 语义）。 */
+  savepoint(name: string): void {
+    if (!this.active) throw new Error('no active transaction');
+    // 移除旧同名（隐式释放，SQLite 语义）
+    this.active.savepoints = this.active.savepoints.filter(s => s.name !== name);
+    this.active.savepoints.push({ name, ...snapshotBuffer(this.active) });
+  }
+
+  /** 回滚到指定 SAVEPOINT。释放该点之后的所有 savepoint。 */
+  rollbackTo(name: string): void {
+    if (!this.active) throw new Error('no active transaction');
+    // 从栈顶往下找最后一个同名点（lib 未启用 es2023，手动反向查找）
+    let idx = -1;
+    for (let i = this.active.savepoints.length - 1; i >= 0; i--) {
+      if (this.active.savepoints[i]!.name === name) { idx = i; break; }
+    }
+    if (idx < 0) throw new Error(`savepoint not found: "${name}"`);
+    const sp = this.active.savepoints[idx]!;
+    // 恢复 buffer
+    this.active.upserts = new Map(sp.upserts);
+    this.active.deletes = new Map(sp.deletes);
+    // 释放该点及之后的所有 savepoint
+    this.active.savepoints = this.active.savepoints.slice(0, idx);
   }
 
   /** 提交：全部校验 → 批量应用镜像+索引+队列 → 单次 flush（G1 单 commit） */
