@@ -1,13 +1,14 @@
 // @gitlite/sdk：connect（URI/对象）、initDB（headless 幂等）、databases、profiles
 import {
-  ForeignRepoError, GitHubProvider, GitLiteClient, MemoryProvider,
-  deviceFlowLogin, SYS, type GitProvider, type RepoRef, type SyncPolicy, POLICIES
+  Collection, ForeignRepoError, GitHubProvider, GiteeProvider, GitLiteClient, MemoryProvider,
+  deviceFlowLogin, exchangeGiteeCode, giteeAuthorizeUrl, resolveGiteeClientId,
+  SYS, type GitProvider, type RepoRef, type SyncPolicy, POLICIES
 } from '@gitlite/core';
-import { createNodeRuntime } from '@gitlite/adapters-node';
+import { createNodeRuntime, createNodeSqlite, waitForRedirect } from '@gitlite/adapters-node';
 import type { RuntimeAdapter } from '@gitlite/core';
 
 export interface SdkConnectOptions {
-  provider: 'github' | 'memory';
+  provider: 'github' | 'gitee' | 'memory';
   owner: string;
   repo?: string;             // 缺省 gitlite-repo（A2 默认仓库）
   database?: string;         // 缺省 default（gitlite/default 分支）
@@ -17,6 +18,8 @@ export interface SdkConnectOptions {
   runtime?: RuntimeAdapter;
   queuePath?: string;
   allowForeignRepo?: boolean;
+  /** 索引后端（P4）：'memory'（默认）/ 'sqlite'（本地缓存 ~/.gitlite/cache/<指纹>/index.db） */
+  indexBackend?: 'memory' | 'sqlite';
   /** 高级：直接注入 Provider 实例（嵌入/测试/演示共用同一"远端"） */
   providerInstance?: GitProvider;
   /** 初始化进度回调（自建向导 UI 用；步骤见 core ConnectStep） */
@@ -41,7 +44,12 @@ export function parseUri(uri: string): SdkConnectOptions {
 
 export async function connect(input: SdkConnectOptions | string): Promise<GitLiteClient> {
   const opts = typeof input === 'string' ? parseUri(input) : input;
-  const runtime = opts.runtime ?? createNodeRuntime();
+  let runtime = opts.runtime ?? createNodeRuntime();
+  // P4：sqlite 索引后端且宿主未注入 sqlite 能力 → 自动接 node:sqlite（不可用则 create 报清晰错误）
+  if (opts.indexBackend === 'sqlite' && !runtime.sqlite) {
+    const sqlite = createNodeSqlite();
+    if (sqlite) runtime = { ...runtime, sqlite };
+  }
   const provider = await buildProvider(opts, runtime);
   const ref: RepoRef = { owner: opts.owner, repo: opts.repo ?? 'gitlite-repo' };
   const policy: SyncPolicy = typeof opts.policy === 'string' || !opts.policy
@@ -52,6 +60,7 @@ export async function connect(input: SdkConnectOptions | string): Promise<GitLit
     database: opts.database,
     policy,
     allowForeignRepo: opts.allowForeignRepo,
+    indexBackend: opts.indexBackend,
     onProgress: opts.onProgress as any
   });
 }
@@ -129,32 +138,84 @@ export async function interactiveLogin(
   return token;
 }
 
+/** Gitee OAuth2 授权码 + loopback 登录（docs/04）：开本地回调 → 弹授权 URL → 换 token → 存凭据库。
+ *  port=0 用随机端口（测试）；生产用固定端口（OAuth App 预注册回调）。
+ *  @returns access_token（已存 gitlite:gitee:default） */
+export async function giteeLogin(opts?: {
+  clientId?: string;
+  clientSecret?: string;
+  scope?: string;
+  port?: number;
+  runtime?: RuntimeAdapter;
+  /** 换 token 用的 fetch（缺省 runtime.fetch；测试注入） */
+  fetchFn?: typeof fetch;
+  onCode?: (url: string, info: { port: number; state: string }) => void;
+}): Promise<string> {
+  const runtime = opts?.runtime ?? createNodeRuntime();
+  const clientId = opts?.clientId ?? resolveGiteeClientId();
+  let state = '';
+  const receiver = waitForRedirect({
+    port: opts?.port,
+    onListening: port => {
+      const redirectUri = `http://127.0.0.1:${port}/callback`;
+      state = Array.from(runtime.crypto.randomBytes(16), b => b.toString(16).padStart(2, '0')).join('');
+      const url = giteeAuthorizeUrl({
+        clientId, redirectUri, state,
+        scope: opts?.scope ?? 'projects user_info'
+      });
+      (opts?.onCode ?? ((u: string) => console.log(`[gitlite] 浏览器打开并授权: ${u}`)))(url, { port, state });
+    }
+  });
+  const { url: redirected } = await receiver;
+  const q = redirected.searchParams;
+  if (state && q.get('state') !== state) {
+    throw new Error('gitee oauth state mismatch (possible CSRF)');
+  }
+  const code = q.get('code');
+  if (!code) throw new Error(`gitee oauth denied: ${q.get('error') ?? 'no code in callback'}`);
+  const redirectUri = `http://127.0.0.1:${redirected.port}/callback`;
+  const { accessToken } = await exchangeGiteeCode(opts?.fetchFn ?? runtime.fetch, {
+    clientId, clientSecret: opts?.clientSecret, code, redirectUri
+  });
+  await runtime.credential.set('gitlite:gitee:default', accessToken);
+  return accessToken;
+}
+
 // ---------- databases（分支模式库管理，FR C1）----------
 
+/** data-plane provider 构造（github 默认；gitee 走 Contents 降级，token 必传） */
+function dataPlaneProvider(ctx: { provider?: 'github' | 'gitee'; token?: string }, fetchImpl: typeof fetch): GitProvider {
+  return ctx.provider === 'gitee'
+    ? new GiteeProvider(ctx.token ?? '', fetchImpl)
+    : new GitHubProvider(ctx.token ?? '', fetchImpl);
+}
+
 export const databases = {
-  async create(name: string, ctx: { owner: string; token?: string; repo?: string; runtime?: RuntimeAdapter }): Promise<void> {
-    const provider = new GitHubProvider(ctx.token ?? '', globalThis.fetch);
+  async create(name: string, ctx: { owner: string; token?: string; repo?: string; provider?: 'github' | 'gitee' }): Promise<void> {
+    const provider = dataPlaneProvider(ctx, globalThis.fetch);
     const ref = { owner: ctx.owner, repo: ctx.repo ?? 'gitlite-repo' };
     await ensureRepo(provider, ref);
     const mainHead = await provider.getHead(ref, 'main');
     await provider.createBranch(ref, `${SYS.dbBranchPrefix}${name}`, mainHead ? 'main' : 'main');
   },
 
-  async list(ctx: { owner: string; token?: string; repo?: string }): Promise<string[]> {
-    const provider = new GitHubProvider(ctx.token ?? '', globalThis.fetch);
+  async list(ctx: { owner: string; token?: string; repo?: string; provider?: 'github' | 'gitee' }): Promise<string[]> {
+    const provider = dataPlaneProvider(ctx, globalThis.fetch);
     const branches = await provider.listBranches({ owner: ctx.owner, repo: ctx.repo ?? 'gitlite-repo' });
     return branches
       .filter(b => b.startsWith(SYS.dbBranchPrefix))
       .map(b => b.slice(SYS.dbBranchPrefix.length));
   },
 
-  async drop(name: string, ctx: { owner: string; token?: string; repo?: string }): Promise<void> {
-    // GitHub REST：DELETE /repos/{o}/{r}/git/refs/heads/<branch>（v0.1 经 provider 通用接口暂缺，SDK 直调）
-    const provider = new GitHubProvider(ctx.token ?? '', globalThis.fetch);
-    const ref = { owner: ctx.owner, repo: ctx.repo ?? 'gitlite-repo' };
-    // 简化：通过 createBranch 幂等 + commit 空? —— v0.1 诚实降级：抛未实现，列入 M9 待办
-    void provider; void ref;
-    throw new Error('databases.drop: branch deletion lands with provider.deleteBranch in M9 (tracked)');
+  async drop(name: string, ctx: { owner: string; token?: string; repo?: string; provider?: 'github' | 'gitee' }): Promise<void> {
+    const provider = dataPlaneProvider(ctx, globalThis.fetch);
+    if (!provider.deleteBranch) {
+      throw new Error('databases.drop: provider does not support branch deletion');
+    }
+    await provider.deleteBranch(
+      { owner: ctx.owner, repo: ctx.repo ?? 'gitlite-repo' },
+      `${SYS.dbBranchPrefix}${name}`
+    );
   }
 };
 
@@ -166,13 +227,15 @@ async function ensureRepo(provider: GitProvider, ref: RepoRef): Promise<void> {
 async function buildProvider(opts: SdkConnectOptions, runtime: RuntimeAdapter): Promise<GitProvider> {
   if (opts.providerInstance) return opts.providerInstance;
   if (opts.provider === 'memory') return new MemoryProvider();
+  const isGitee = opts.provider === 'gitee';
+  const prefix = isGitee ? 'gitlite:gitee' : CRED_PREFIX;
   const token = opts.token
     ?? (opts.profile
-        ? await runtime.credential.get(`${CRED_PREFIX}:${opts.profile}`)
-        : await runtime.credential.get(`${CRED_PREFIX}:default`));
-  if (!token) throw new Error('no github token: pass token, login first, or set profile');
-  return new GitHubProvider(token, runtime.fetch);
+        ? await runtime.credential.get(`${prefix}:${opts.profile}`)
+        : await runtime.credential.get(`${prefix}:default`));
+  if (!token) throw new Error(`no ${opts.provider} token: pass token, login first, or set profile`);
+  return isGitee ? new GiteeProvider(token, runtime.fetch) : new GitHubProvider(token, runtime.fetch);
 }
 
-export { GitLiteClient, MemoryProvider, GitHubProvider, POLICIES, SYS };
+export { GitLiteClient, MemoryProvider, GitHubProvider, GiteeProvider, Collection, POLICIES, SYS };
 export type { GitProvider, SyncPolicy, RuntimeAdapter };

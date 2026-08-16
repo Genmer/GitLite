@@ -1,11 +1,17 @@
-// Node.js 运行时适配（FR I4）：fs（~ 展开）/ crypto / 凭据文件 / fetch / 退出钩子
-// 注意：credential 为 v0.1 文件级 fallback（0600 目录 + 逐 token 加密文件头标注），
-// OS keychain（keytar/safeStorage）在 v0.2 接入，见 12 复核 B3。
+// Node.js 运行时适配（FR I4）：fs（~ 展开）/ crypto / 凭据（文件或 OS 钥匙串）/ fetch / 退出钩子 / SQLite（P4）
+// 凭据两级：FileCredentialStore（默认，v0.1 行为）/ OS 钥匙串（credential:'os' 选入，见 credentials.ts）
 import * as fs from 'node:fs/promises';
 import * as nodeCrypto from 'node:crypto';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import type { RuntimeAdapter } from '@gitlite/core';
+import { createRequire } from 'node:module';
+import type { RuntimeAdapter, SqliteAdapterFactory, SqliteDb } from '@gitlite/core';
+import { createOsCredentialStore, FileCredentialStore } from './credentials.js';
+import { waitForRedirect, GITLITE_LOOPBACK_PORT } from './loopback.js';
+
+export { createOsCredentialStore, FileCredentialStore };
+export type { Runner, ExecResult } from './credentials.js';
+export { waitForRedirect, GITLITE_LOOPBACK_PORT };
 
 function expand(p: string): string {
   return p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
@@ -42,33 +48,16 @@ const nodeCryptoAdapter = {
   }
 };
 
-/** 凭据文件：~/.gitlite/credentials/<hash>.tok（目录权限 0700）；内容为裸 token */
-class FileCredentialStore {
-  constructor(private dir = '~/.gitlite/credentials') {}
+/** 凭据文件存储已迁移至 credentials.ts（FileCredentialStore） */
 
-  private file(key: string): string {
-    const h = nodeCrypto.createHash('sha256').update(key).digest('hex').slice(0, 24);
-    return path.join(expand(this.dir), `${h}.tok`);
-  }
-
-  async set(key: string, value: string): Promise<void> {
-    const f = this.file(key);
-    await fs.mkdir(path.dirname(f), { recursive: true });
-    await fs.chmod(path.dirname(f), 0o700).catch(() => {});
-    await fs.writeFile(f, value, { encoding: 'utf8', mode: 0o600 });
-  }
-
-  async get(key: string): Promise<string | null> {
-    try { return await fs.readFile(this.file(key), 'utf8'); } catch { return null; }
-  }
-
-  async delete(key: string): Promise<void> {
-    await fs.rm(this.file(key), { force: true });
-  }
-}
-
-export function createNodeRuntime(opts?: { credentialDir?: string }): RuntimeAdapter {
-  const creds = new FileCredentialStore(opts?.credentialDir);
+export function createNodeRuntime(opts?: {
+  credentialDir?: string;
+  /** 'file'（默认，兼容 v0.1）/ 'os'（darwin=security / linux=secret-tool，缺失自动回退文件） */
+  credential?: 'file' | 'os';
+}): RuntimeAdapter {
+  const creds = opts?.credential === 'os'
+    ? createOsCredentialStore({ fallbackDir: opts?.credentialDir })
+    : new FileCredentialStore(opts?.credentialDir);
   return {
     fs: nodeFs,
     crypto: nodeCryptoAdapter,
@@ -79,6 +68,29 @@ export function createNodeRuntime(opts?: { credentialDir?: string }): RuntimeAda
       process.once('beforeExit', () => { void fn(); });
       process.once('SIGINT', () => { void Promise.resolve(fn()).finally(() => process.exit(0)); });
       process.once('SIGTERM', () => { void Promise.resolve(fn()).finally(() => process.exit(0)); });
+    }
+  };
+}
+
+/** 本地 SQLite 索引后端工厂（P4，docs/14）：node:sqlite（Node ≥22.5，同步 API）。
+ *  低版本 / 缺失返回 null——宿主与 core 均回退纯内存索引，不构成故障。 */
+export function createNodeSqlite(): SqliteAdapterFactory | null {
+  let DatabaseSync: new (path: string) => any;
+  try {
+    ({ DatabaseSync } = createRequire(import.meta.url)('node:sqlite'));
+  } catch {
+    return null;
+  }
+  return {
+    open(path: string): SqliteDb {
+      const db = new DatabaseSync(expand(path));
+      try { db.exec('PRAGMA journal_mode = WAL'); } catch { /* :memory: 等场景不支持 WAL，忽略 */ }
+      return {
+        exec: sql => void db.exec(sql),
+        run: (sql, params = []) => Number(db.prepare(sql).run(...params).changes),
+        all: (sql, params = []) => db.prepare(sql).all(...params),
+        close: () => void db.close()
+      };
     }
   };
 }
