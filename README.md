@@ -1,6 +1,8 @@
 # GitLite
 
 > 像 SQLite 一样嵌入在本地，但原生连通云端 Git 仓库。
+>
+> 📦 源码：[gitee.com/genmers/GitLite](https://gitee.com/genmers/GitLite)（Gitee 镜像，主仓库）
 
 GitLite 把任意 Git 仓库（首先支持 GitHub 和 Gitee）抽象成一个**嵌入式云端数据库**——把远程仓库当成本地工作内存来用（类似 Java 的抽象工作内存）。它提供简单易用的 API 给上层应用，让开发者像用 SQLite / MongoDB 一样操作 Git 仓库，无需公网 IP、无需服务器。
 
