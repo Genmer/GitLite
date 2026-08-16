@@ -25,6 +25,30 @@ describe('waitForRedirect（loopback 接收器）', () => {
     await expect(waitForRedirect({ port: 0, timeoutMs: 80 })).rejects.toThrow(/timeout/);
   });
 
+  it('AbortSignal：监听后中止 → 关服拒绝并释放端口', async () => {
+    const controller = new AbortController();
+    const ready = new Promise<number>(res => {
+      void waitForRedirect({ port: 0, signal: controller.signal, onListening: res })
+        .catch(() => undefined); // 拒绝由下方显式断言验证
+    });
+    const port = await ready;
+    const receiver = waitForRedirect({ port: 0, signal: controller.signal, onListening: () => {} });
+    controller.abort();
+    await expect(receiver).rejects.toThrow(/aborted/);
+    // 端口已释放：同端口可立即重新监听
+    const rebind = waitForRedirect({ port, timeoutMs: 300 });
+    rebind.catch(() => undefined);
+    const res = await fetch(`http://127.0.0.1:${port}/callback?code=x`);
+    expect(res.status).toBe(200);
+    await rebind; // 不抛即通过
+  });
+
+  it('已中止的 signal → 立即拒绝', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await expect(waitForRedirect({ port: 0, signal: controller.signal })).rejects.toThrow(/aborted/);
+  });
+
   it('默认端口常量存在（docs/04 固定 loopback 端口）', () => {
     expect(GITLITE_LOOPBACK_PORT).toBe(18365);
   });

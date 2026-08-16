@@ -156,6 +156,8 @@ export async function giteeLogin(opts?: {
   /** 换 token 用的 fetch（缺省 runtime.fetch；测试注入） */
   fetchFn?: typeof fetch;
   onCode?: (url: string, info: { port: number; state: string }) => void;
+  /** 取消信号：中止即关闭 loopback 接收器（重试前取消旧登录，防端口占用） */
+  signal?: AbortSignal;
 }): Promise<string> {
   const runtime = opts?.runtime ?? createNodeRuntime();
   // clientId/secret 解析顺序：显式参数 > 环境变量 > app-config.json（引导配置模块写入）> 占位常量
@@ -169,6 +171,7 @@ export async function giteeLogin(opts?: {
   let state = '';
   const receiver = waitForRedirect({
     port: opts?.port,
+    signal: opts?.signal,
     onListening: port => {
       const redirectUri = `http://127.0.0.1:${port}/callback`;
       state = Array.from(runtime.crypto.randomBytes(16), b => b.toString(16).padStart(2, '0')).join('');

@@ -336,8 +336,18 @@ export function GitLiteSetup(props: {
                 )}
               </div>
               <div className="gl-actions">
-                <button className="gl-btn gl-btn-primary" data-testid={`setup-oauth-${p}`} onClick={() => { setProvider(p); setClientId(''); setClientSecret(''); setCopied(false); setPhase('oauth'); }}>登记 OAuth 应用</button>
-                <button className="gl-btn gl-btn-secondary" data-testid={`setup-pat-${p}`} onClick={() => { setProvider(p); setPat(''); setPhase('pat'); }}>使用私人令牌</button>
+                {status && status[p].oauthApp && !status[p].token ? (
+                  <>
+                    <button className="gl-btn gl-btn-primary" data-testid={`setup-login-${p}`} onClick={() => { setWizardInit({ provider: p }); setPhase('wizard'); }}>登录 {PLATFORM_NAME[p]}</button>
+                    <button className="gl-btn gl-btn-secondary" data-testid={`setup-pat-${p}`} onClick={() => { setProvider(p); setPat(''); setPhase('pat'); }}>使用私人令牌</button>
+                    <button className="gl-btn gl-btn-ghost" data-testid={`setup-oauth-${p}`} onClick={() => { setProvider(p); setClientId(''); setClientSecret(''); setCopied(false); setPhase('oauth'); }}>重新登记</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="gl-btn gl-btn-primary" data-testid={`setup-oauth-${p}`} onClick={() => { setProvider(p); setClientId(''); setClientSecret(''); setCopied(false); setPhase('oauth'); }}>登记 OAuth 应用</button>
+                    <button className="gl-btn gl-btn-secondary" data-testid={`setup-pat-${p}`} onClick={() => { setProvider(p); setPat(''); setPhase('pat'); }}>使用私人令牌</button>
+                  </>
+                )}
               </div>
             </div>
           ))}

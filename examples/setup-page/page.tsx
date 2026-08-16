@@ -15,12 +15,16 @@ const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
   return data as T;
 };
 
-/** 登录任务：发起后轮询，hint（验证码/授权链接）变化时经 onCode 推给向导显示 */
+/** 登录任务：发起后轮询，hint（验证码/授权链接）变化时经 onCode 推给向导显示。
+ *  只处理「最新一次」登录任务——重试后旧任务的轮询自动退出，不串台更新提示。 */
+let latestLoginJob: string | null = null;
 async function loginViaApi(provider: 'github' | 'gitee', onCode: (info: string) => void): Promise<string> {
   const { jobId } = await api<{ jobId: string }>(`/api/login/${provider}`, { method: 'POST' });
+  latestLoginJob = jobId;
   let lastHint = '';
   for (;;) {
     const job = await api<{ status: string; hint?: string; error?: string }>(`/api/login/${jobId}`);
+    if (latestLoginJob !== jobId) throw new Error('已发起新的登录，本次尝试作废');
     if (job.hint && job.hint !== lastHint) {
       lastHint = job.hint;
       onCode(job.hint);

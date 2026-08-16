@@ -114,4 +114,18 @@ describe('GitLiteSetup（引导配置）', () => {
     await act(async () => { fireEvent.click(screen.getByTestId('setup-skip')); });
     expect(screen.getByTestId('wizard-provider')).toBeTruthy();
   });
+
+  it('应用已登记但未登录 → 直接给「登录」主按钮，直达向导登录步', async () => {
+    const flows = stubSetupFlows({
+      detect: vi.fn(async () => ({
+        github: { oauthApp: true, token: true },
+        gitee: { oauthApp: true, token: false }
+      }))
+    });
+    render(<GitLiteSetup onReady={() => {}} flows={flows} />);
+    await waitFor(() => expect(screen.getByTestId('setup-choose')).toBeTruthy());
+    await act(async () => { fireEvent.click(screen.getByTestId('setup-login-gitee')); });
+    await waitFor(() => expect(screen.getByTestId('wizard-login')).toBeTruthy()); // 直达 gitee 登录步
+    expect(screen.getByTestId('wizard-login').textContent).toContain('Gitee');
+  });
 });

@@ -21,6 +21,8 @@ const runtime: RuntimeAdapter = createNodeRuntime();
 interface Job { status: 'pending' | 'done' | 'error'; hint?: string; error?: string }
 const jobs = new Map<string, Job>();
 let jobSeq = 0;
+/** 每平台当前登录的取消器：重试/新登录前中止旧 loopback 接收器（防 18365 占用 EADDRINUSE） */
+const loginAbort = new Map<'github' | 'gitee', AbortController>();
 
 const startJob = (run: (job: Job) => Promise<void>): string => {
   const id = `j${++jobSeq}`;
@@ -65,18 +67,29 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       return send({ login });
     }
     if (req.method === 'POST' && seg[1] === 'login' && provider) {
+      loginAbort.get(provider)?.abort(); // 中止旧接收器（上一次失败/放弃的登录仍占着 18365）
+      const controller = new AbortController();
+      loginAbort.set(provider, controller);
       const id = startJob(async job => {
-        if (provider === 'gitee') {
-          await giteeLogin({
-            runtime,
-            onCode: u => { job.hint = `浏览器打开并授权：${u}`; }
-          });
-        } else {
-          await interactiveLogin(runtime, (code, uri) => {
-            job.hint = `打开 ${uri} 并输入代码：${code}`;
-          });
+        try {
+          if (provider === 'gitee') {
+            await giteeLogin({
+              runtime, signal: controller.signal,
+              onCode: u => { job.hint = `浏览器打开并授权：${u}`; }
+            });
+          } else {
+            await interactiveLogin(runtime, (code, uri) => {
+              job.hint = `打开 ${uri} 并输入代码：${code}`;
+            });
+          }
+          job.status = 'done';
+        } catch (e: any) {
+          job.status = 'error';
+          job.error = /EADDRINUSE/.test(String(e?.message ?? e))
+            ? '回调端口 18365 被占用（可能仍有残留登录进程）——请稍候几秒重试'
+            : /aborted/.test(String(e?.message ?? e)) ? '已取消（被新的登录尝试取代）'
+            : String(e?.message ?? e);
         }
-        job.status = 'done';
       });
       return send({ jobId: id });
     }
