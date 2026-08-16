@@ -1,7 +1,7 @@
 // @gitlite/sdk：connect（URI/对象）、initDB（headless 幂等）、databases、profiles
 import {
   Collection, ForeignRepoError, GitHubProvider, GiteeProvider, GitLiteClient, MemoryProvider,
-  deviceFlowLogin, exchangeGiteeCode, giteeAuthorizeUrl, resolveGiteeClientId,
+  deviceFlowLogin, exchangeGiteeCode, giteeAuthorizeUrl, resolveGiteeClientId, resolveGiteeClientSecret,
   SYS, type GitProvider, type RepoRef, type SyncPolicy, POLICIES
 } from '@gitlite/core';
 import { createNodeRuntime, createNodeSqlite, waitForRedirect } from '@gitlite/adapters-node';
@@ -153,6 +153,7 @@ export async function giteeLogin(opts?: {
 }): Promise<string> {
   const runtime = opts?.runtime ?? createNodeRuntime();
   const clientId = opts?.clientId ?? resolveGiteeClientId();
+  const clientSecret = opts?.clientSecret ?? resolveGiteeClientSecret();
   let state = '';
   const receiver = waitForRedirect({
     port: opts?.port,
@@ -175,7 +176,7 @@ export async function giteeLogin(opts?: {
   if (!code) throw new Error(`gitee oauth denied: ${q.get('error') ?? 'no code in callback'}`);
   const redirectUri = `http://127.0.0.1:${redirected.port}/callback`;
   const { accessToken } = await exchangeGiteeCode(opts?.fetchFn ?? runtime.fetch, {
-    clientId, clientSecret: opts?.clientSecret, code, redirectUri
+    clientId, clientSecret, code, redirectUri
   });
   await runtime.credential.set('gitlite:gitee:default', accessToken);
   return accessToken;

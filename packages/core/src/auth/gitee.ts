@@ -17,6 +17,11 @@ export function resolveGiteeClientId(): string {
     ?? GITLITE_GITEE_CLIENT_ID;
 }
 
+/** 机密客户端密钥（Gitee 授权码换 token 需要；与 client_id 一起从注册页复制，经 env 注入） */
+export function resolveGiteeClientSecret(): string | undefined {
+  return process.env.GITLITE_GITEE_CLIENT_SECRET ?? undefined;
+}
+
 export interface GiteeTokens {
   accessToken: string;
   refreshToken: string | null;

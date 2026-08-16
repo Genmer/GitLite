@@ -1,7 +1,7 @@
 // Gitee OAuth 纯逻辑测试：授权 URL / 换 token（表单体）/ 刷新 / client_id 解析
 import { describe, expect, it, afterEach } from 'vitest';
 import {
-  giteeAuthorizeUrl, exchangeGiteeCode, refreshGiteeToken, resolveGiteeClientId
+  giteeAuthorizeUrl, exchangeGiteeCode, refreshGiteeToken, resolveGiteeClientId, resolveGiteeClientSecret
 } from './gitee.js';
 import { AuthError } from '../errors.js';
 
@@ -79,15 +79,15 @@ describe('exchangeGiteeCode / refreshGiteeToken', () => {
   });
 });
 
-describe('resolveGiteeClientId', () => {
-  const keys = ['GITLITE_GITEE_CLIENT_ID', 'GITLITE_CLIENT_ID'];
+describe('resolveGiteeClientId / resolveGiteeClientSecret', () => {
+  const keys = ['GITLITE_GITEE_CLIENT_ID', 'GITLITE_CLIENT_ID', 'GITLITE_GITEE_CLIENT_SECRET'];
   afterEach(() => { for (const k of keys) delete process.env[k]; });
-  it('环境变量优先，缺省占位常量', () => {
+  it('环境变量优先，缺省占位常量；secret 可缺省', () => {
     expect(resolveGiteeClientId()).toBe('gitlite-placeholder');
+    expect(resolveGiteeClientSecret()).toBeUndefined();
     process.env.GITLITE_GITEE_CLIENT_ID = 'env-specific';
     expect(resolveGiteeClientId()).toBe('env-specific');
-    delete process.env.GITLITE_GITEE_CLIENT_ID;
-    process.env.GITLITE_CLIENT_ID = 'env-generic';
-    expect(resolveGiteeClientId()).toBe('env-generic');
+    process.env.GITLITE_GITEE_CLIENT_SECRET = 'sec';
+    expect(resolveGiteeClientSecret()).toBe('sec');
   });
 });

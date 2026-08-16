@@ -15,7 +15,7 @@ export { deviceFlowLogin, GITLITE_GITHUB_CLIENT_ID } from './auth/device.js';
 export type { DeviceFlowCallbacks } from './auth/device.js';
 export {
   giteeAuthorizeUrl, exchangeGiteeCode, refreshGiteeToken,
-  resolveGiteeClientId, GITLITE_GITEE_CLIENT_ID
+  resolveGiteeClientId, resolveGiteeClientSecret, GITLITE_GITEE_CLIENT_ID
 } from './auth/gitee.js';
 export type { GiteeTokens } from './auth/gitee.js';
 export { StorageEngine, parseDocs } from './storage/engine.js';

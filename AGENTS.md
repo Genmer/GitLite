@@ -56,7 +56,7 @@
 - **全部规划内可实现项已完成**（7 包：core/adapters-node/codegen/react/ui/sdk/cli）；剩余仅物理依赖用户的事项（见下）
 - 门禁：188 测试全绿（31 文件），覆盖率 lines 91.48%，7 包 build/typecheck 0 错，golden v1.0 冻结基线稳定
 
-**醒来后只剩三件物理上无法代做的事**：① Gitee OAuth 真机 E2E（需用你的 Gitee 账号注册 OAuth App，回调填 `http://127.0.0.1:18365/callback`）；② mac/linux 真钥匙串验证（security/secret-tool CLI 实测，本机是 Windows）；③ review + commit（全部代码在工作区未提交，与之前的未提交改动并存）。
+**醒来后只剩三件物理上无法代做的事**：① Gitee OAuth 真机 E2E——**自动化已就绪**：用户在 gitee.com/oauth/applications/new 登记一次（回调 `http://127.0.0.1:18365/callback`、权限勾 projects+user_info），拿到 ClientID/Secret 后跑 `npx tsx examples/demo-gitee-oauth.ts <id> <secret>` 即全链路（弹浏览器→换 token→建仓→bootstrap→push）；② mac/linux 真钥匙串验证（用户已明确搁置）；③ push（本地里程碑提交已完成，见 git log）。
 
 ## 6. 已知坑（历史教训，勿重踩）
 
