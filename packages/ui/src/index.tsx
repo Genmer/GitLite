@@ -90,6 +90,8 @@ export function GitLiteWizard(props: {
   const [hint, setHint] = useState('');
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  /** 登录进行中（等待授权）：锁重复点击防「新登录取代旧任务」误触 */
+  const [waiting, setWaiting] = useState(false);
 
   const choose = (p: WizardProvider): void => {
     setProvider(p);
@@ -99,6 +101,7 @@ export function GitLiteWizard(props: {
   const doLogin = async (): Promise<void> => {
     setError('');
     setHint('登录中…');
+    setWaiting(true);
     try {
       const t = await flows.login(provider, info => setHint(info));
       setToken(t);
@@ -108,6 +111,8 @@ export function GitLiteWizard(props: {
     } catch (e: any) {
       setError(String(e?.message ?? e));
       setStep('error');
+    } finally {
+      setWaiting(false);
     }
   };
 
@@ -144,19 +149,34 @@ export function GitLiteWizard(props: {
           </div>
         </div>
       );
-    case 'login':
+    case 'login': {
+      // 提示中出现的授权/验证链接 → 给可点击的大按钮（新标签页），不让用户复制 URL
+      const authUrl = hint.match(/https?:\/\/[^\s，。]+/)?.[0];
       return (
         <div className="gl-card" data-testid="wizard-login">
           <h3 className="gl-title">登录 {PLATFORM_NAME[provider]}</h3>
           {hint && (
             <p className="gl-hintbox" data-testid="wizard-hint">{hint}</p>
           )}
-          <div className="gl-actions">
-            <button className="gl-btn gl-btn-primary" onClick={() => void doLogin()}>登录</button>
-            <button className="gl-btn gl-btn-ghost" onClick={() => setStep('provider')}>返回</button>
-          </div>
+          {authUrl ? (
+            <>
+              <a className="gl-btn gl-btn-primary gl-auth-open" href={authUrl} target="_blank" rel="noreferrer" data-testid="wizard-open-auth">打开授权页面 →</a>
+              <p className="gl-wait">在新打开的页面完成授权后，本页会自动继续…</p>
+              <div className="gl-actions">
+                <button className="gl-btn gl-btn-ghost" onClick={() => void doLogin()} disabled={!waiting}>重新发起登录</button>
+              </div>
+            </>
+          ) : (
+            <div className="gl-actions">
+              <button className="gl-btn gl-btn-primary" onClick={() => void doLogin()} disabled={waiting}>
+                {waiting ? '登录中…' : '登录'}
+              </button>
+              <button className="gl-btn gl-btn-ghost" onClick={() => setStep('provider')} disabled={waiting}>返回</button>
+            </div>
+          )}
         </div>
       );
+    }
     case 'config':
       return (
         <div className="gl-card" data-testid="wizard-config">

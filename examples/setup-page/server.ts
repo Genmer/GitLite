@@ -276,6 +276,8 @@ async function main(): Promise<void> {
     background: var(--accent-weak); border-radius: 10px; padding: 12px 14px;
     font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; margin: 0 0 4px;
   }
+  .gl-auth-open { display: inline-block; margin-top: 12px; text-decoration: none; }
+  .gl-wait { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
   .gl-error { border-color: var(--bad); }
   .gl-errmsg { color: var(--bad); font-size: 14px; margin: 0 0 4px; }
   .gl-progress { color: var(--muted); margin: 10px 0 0; font-size: 13.5px; }

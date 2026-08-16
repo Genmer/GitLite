@@ -11,7 +11,7 @@ const fakeDb = { fake: 'client' } as any;
 function stubFlows(overrides: Partial<WizardFlows> = {}): WizardFlows {
   return {
     login: vi.fn(async (_p, onCode) => {
-      onCode('打开 example.com 输入代码: ABC-123');
+      onCode('打开 https://example.com/device 输入代码: ABC-123');
       await new Promise(r => setTimeout(r, 30)); // 留出登录步渲染提示的时间
       return 'tok-1';
     }),
@@ -32,9 +32,10 @@ describe('GitLiteWizard（内置向导）', () => {
     await act(async () => { fireEvent.click(screen.getByText('GitHub')); });
     expect(screen.getByTestId('wizard-login')).toBeTruthy();
 
-    // 登录：提示码在登录步可见；成功后进入配置，owner 已由 identity 预填
+    // 登录：提示码可见；授权链接渲染为可点击按钮；成功后进入配置，owner 已由 identity 预填
     await act(async () => { fireEvent.click(screen.getByText('登录')); });
     await waitFor(() => expect(screen.getByTestId('wizard-hint').textContent).toContain('ABC-123'));
+    expect(screen.getByTestId('wizard-open-auth').getAttribute('href')).toBe('https://example.com/device');
     await waitFor(() => expect(screen.getByTestId('wizard-config')).toBeTruthy());
     expect((screen.getByTestId('wizard-owner') as HTMLInputElement).value).toBe('alice');
 
