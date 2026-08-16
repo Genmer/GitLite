@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from './index.js';
@@ -36,5 +36,20 @@ describe('CLI 冒烟（FR J 组）', () => {
 
   it('缺 --db 报错退出 2', async () => {
     expect(await run(['data', 'find', 'x'])).toBe(2);
+  });
+
+  it('codegen：本地 schema 目录 → 生成强类型 Client', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'gitlite-cli-codegen-'));
+    writeFileSync(join(dir, 'users.schema.jsonc'),
+      '{ "properties": { "email": { "type": "string" } }, "required": ["email"] }');
+    const out = join(dir, 'generated');
+    expect(await run(['codegen', '--schema', dir, '--out', out])).toBe(0);
+    expect(existsSync(join(out, 'gitlite.types.ts'))).toBe(true);
+    expect(readFileSync(join(out, 'gitlite.client.ts'), 'utf8')).toContain('TypedGitLiteClient');
+    rmSync(dir, { recursive: true, force: true });
+    // 空目录 → 退出 1（错误信息不炸）
+    const empty = mkdtempSync(join(tmpdir(), 'gitlite-cli-codegen-empty-'));
+    expect(await run(['codegen', '--schema', empty, '--out', join(empty, 'g')])).toBe(1);
+    rmSync(empty, { recursive: true, force: true });
   });
 });

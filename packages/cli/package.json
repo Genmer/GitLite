@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "description": "GitLite CLI",
   "type": "module",
-  "bin": { "gitlite": "./src/bin.ts" },
-  "main": "./src/index.ts",
-  "scripts": { "build": "tsc -p tsconfig.json", "test": "vitest run --passWithNoTests" },
+  "bin": { "gitlite": "./dist/bin.js" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.build.json", "test": "vitest run --passWithNoTests" },
   "dependencies": {
     "@gitlite/adapters-node": "0.1.0",
+    "@gitlite/codegen": "0.1.0",
     "@gitlite/core": "0.1.0",
     "@gitlite/sdk": "0.1.0"
   }

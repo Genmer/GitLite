@@ -1,8 +1,11 @@
 // @gitlite/cli v0.1：最小命令集（手写 argv，v0.3 换 commander）
-// auth / db / data / sync；repl 诚实降级至 v0.2（见 progress）
-import { connect, interactiveLogin, databases, parseUri } from '@gitlite/sdk';
+// auth / db / data / sync / repl（J5 v0.2 追回已落地）
+import { connect, interactiveLogin, giteeLogin, databases, parseUri } from '@gitlite/sdk';
+import { generateFromDir, writeResult } from '@gitlite/codegen';
+import { watch } from 'node:fs';
 import { createNodeRuntime } from '@gitlite/adapters-node';
 import type { RuntimeAdapter } from '@gitlite/core';
+import { startRepl } from './repl.js';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -20,6 +23,8 @@ export async function run(argv: string[]): Promise<number> {
       case 'db': return await dbCmd(sub, args);
       case 'data': return await dataCmd(sub, args);
       case 'sync': return await syncCmd(sub, args);
+      case 'repl': return await replCmd(parseArgs(argv.slice(1)));      // 无子命令：不从 sub 位起步解析
+      case 'codegen': return await codegenCmd(parseArgs(argv.slice(1)));
       case undefined:
       case 'help':
         printHelp();
@@ -39,6 +44,11 @@ export async function run(argv: string[]): Promise<number> {
 async function authCmd(sub: string | undefined, args: Record<string, string>, runtime: RuntimeAdapter): Promise<number> {
   switch (sub) {
     case 'login': {
+      if (args.provider === 'gitee') {
+        await giteeLogin({ runtime });
+        console.log('✓ logged in (gitee), token saved to credential store');
+        return 0;
+      }
       const token = await interactiveLogin(runtime);
       console.log('✓ logged in, token saved to credential store');
       void token;
@@ -50,17 +60,19 @@ async function authCmd(sub: string | undefined, args: Record<string, string>, ru
       return 0;
     }
     case 'status': {
-      const token = await runtime.credential.get('gitlite:github:default');
+      const gh = await runtime.credential.get('gitlite:github:default');
+      const ge = await runtime.credential.get('gitlite:gitee:default');
       let bound: any = null;
       try { bound = JSON.parse(await readFile(BINDINGS, 'utf8')); } catch { /* 未初始化 */ }
       console.log(JSON.stringify({
-        github: token ? '✓ logged in' : '✗ not logged in',
+        github: gh ? '✓ logged in' : '✗ not logged in',
+        gitee: ge ? '✓ logged in' : '✗ not logged in',
         bindings: bound
       }, null, 2));
       return 0;
     }
     default:
-      console.error('usage: gitlite auth login|status|logout');
+      console.error('usage: gitlite auth login [--provider github|gitee]|status|logout');
       return 2;
   }
 }
@@ -81,9 +93,12 @@ async function dbCmd(sub: string | undefined, args: Record<string, string>): Pro
       console.log(list.join('\n'));
       return 0;
     }
-    case 'drop':
-      console.error('db drop: lands with provider.deleteBranch (M9, tracked in progress.md)');
-      return 2;
+    case 'drop': {
+      if (!args.name) { console.error('usage: gitlite db drop <name> --owner x --token y'); return 2; }
+      await databases.drop(args.name, ctx);
+      console.log(`✓ database dropped: ${args.name}`);
+      return 0;
+    }
     default:
       console.error('usage: gitlite db create|list|drop');
       return 2;
@@ -153,6 +168,45 @@ async function syncCmd(sub: string | undefined, args: Record<string, string>): P
   }
 }
 
+// ---------- repl（J5：交互式求值 + 点命令） ----------
+async function replCmd(args: Record<string, string>): Promise<number> {
+  if (!args.db) { console.error('usage: gitlite repl --db <uri>'); return 2; }
+  const db = await connect(args.db);
+  try {
+    await startRepl(db, process.stdin, process.stdout);
+  } finally {
+    await db.close().catch(() => {}); // 退出自动 flush（F3）
+  }
+  return 0;
+}
+
+// ---------- codegen（docs/09 §三：schema → 强类型 Client） ----------
+async function codegenCmd(args: Record<string, string>): Promise<number> {
+  const schemaDir = args.schema ?? './_schema';
+  const outDir = args.out ?? './generated';
+  const runOnce = async (quiet = false): Promise<void> => {
+    const result = await generateFromDir(schemaDir);
+    await writeResult(result, outDir);
+    if (!quiet) console.log(`✓ generated ${result.collections.length} collection(s) → ${outDir}/gitlite.{types,client}.ts`);
+  };
+  try {
+    await runOnce();
+  } catch (e: any) {
+    console.error(`✗ ${e?.message ?? e}`);
+    return 1;
+  }
+  if (args.watch) {
+    console.log(`watching ${schemaDir} for changes (Ctrl+C 退出)…`);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    watch(schemaDir, { persistent: true }, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void runOnce(true).catch(() => undefined); }, 200); // 防抖
+    });
+    return new Promise<number>(() => undefined); // 常驻直至 Ctrl+C
+  }
+  return 0;
+}
+
 function parseArgs(rest: string[]): Record<string, string> {
   const out: Record<string, string> = {};
   for (let i = 0; i < rest.length; i++) {
@@ -178,6 +232,8 @@ usage:
   gitlite db create|list|drop --owner <login> --token <pat>
   gitlite data insert|find|count <collection> --db <uri> [--doc|--filter|--limit]
   gitlite sync status|push|pull --db <uri>
+  gitlite repl --db <uri>
+  gitlite codegen [--schema ./_schema] [--out ./generated] [--watch]
 
 uri: gitlite://<provider>:<auth>@<owner>/<repo>/<database>`);
 }
