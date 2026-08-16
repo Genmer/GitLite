@@ -34,6 +34,10 @@ describe('CLI 冒烟（FR J 组）', () => {
     expect(await run(['sync', 'status', '--db', 'gitlite://memory:t@me/gitlite-repo/default'])).toBe(0);
   });
 
+  it('setup --check：打印两平台状态 JSON 退出 0', async () => {
+    expect(await run(['setup', '--check'])).toBe(0);
+  });
+
   it('缺 --db 报错退出 2', async () => {
     expect(await run(['data', 'find', 'x'])).toBe(2);
   });

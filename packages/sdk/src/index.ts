@@ -2,9 +2,12 @@
 import {
   Collection, ForeignRepoError, GitHubProvider, GiteeProvider, GitLiteClient, MemoryProvider,
   deviceFlowLogin, exchangeGiteeCode, giteeAuthorizeUrl, resolveGiteeClientId, resolveGiteeClientSecret,
+  GITLITE_GITEE_CLIENT_ID,
   SYS, type GitProvider, type RepoRef, type SyncPolicy, POLICIES
 } from '@gitlite/core';
 import { createNodeRuntime, createNodeSqlite, waitForRedirect } from '@gitlite/adapters-node';
+import { getOAuthApp } from './app-config.js';
+export * from './app-config.js';
 import type { RuntimeAdapter } from '@gitlite/core';
 
 export interface SdkConnectOptions {
@@ -124,16 +127,19 @@ export async function initDB(
   return client;
 }
 
-/** GitHub Device Flow 登录 → token 存凭据库（B1/B3），返回裸 token */
+/** GitHub Device Flow 登录 → token 存凭据库（B1/B3），返回裸 token。
+ *  clientId 解析顺序：显式参数 > 环境变量 > ~/.gitlite/app-config.json（引导配置模块写入）> core 占位 */
 export async function interactiveLogin(
   runtime: RuntimeAdapter,
-  onCode?: (code: string, uri: string) => void
+  onCode?: (code: string, uri: string) => void,
+  opts?: { clientId?: string }
 ): Promise<string> {
+  const configured = (await getOAuthApp(runtime, 'github')).clientId;
   const { token } = await deviceFlowLogin(runtime.fetch, {
     onCode: onCode ?? ((code, uri) => {
       console.log(`[gitlite] 打开 ${uri} 并输入代码: ${code}`);
     })
-  });
+  }, { clientId: opts?.clientId ?? configured });
   await runtime.credential.set(`${CRED_PREFIX}:default`, token);
   return token;
 }
@@ -152,8 +158,14 @@ export async function giteeLogin(opts?: {
   onCode?: (url: string, info: { port: number; state: string }) => void;
 }): Promise<string> {
   const runtime = opts?.runtime ?? createNodeRuntime();
-  const clientId = opts?.clientId ?? resolveGiteeClientId();
-  const clientSecret = opts?.clientSecret ?? resolveGiteeClientSecret();
+  // clientId/secret 解析顺序：显式参数 > 环境变量 > app-config.json（引导配置模块写入）> 占位常量
+  const configured = await getOAuthApp(runtime, 'gitee');
+  const envId = resolveGiteeClientId();
+  const clientId = opts?.clientId
+    ?? (envId !== GITLITE_GITEE_CLIENT_ID ? envId : undefined)
+    ?? configured.clientId
+    ?? GITLITE_GITEE_CLIENT_ID;
+  const clientSecret = opts?.clientSecret ?? resolveGiteeClientSecret() ?? configured.clientSecret;
   let state = '';
   const receiver = waitForRedirect({
     port: opts?.port,

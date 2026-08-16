@@ -35,7 +35,7 @@ GitLite 把任意 Git 仓库（首先支持 GitHub 和 Gitee）抽象成一个**
 | `@gitlite/cli` | `gitlite auth|db|data|sync|repl|codegen`（REPL 支持 `db.users.find({...})` 表达式求值 + 点命令 + 补全） |
 | `@gitlite/codegen` | schema(.schema.jsonc) → 强类型 TS Client（Doc/Input 接口 + TypedGitLiteClient） |
 | `@gitlite/react` | hooks：useGitLite / useFind / useDoc / useUpdate（remoteChange 自动 refetch） |
-| `@gitlite/ui` | `<GitLiteWizard>` 内置向导（选平台→登录→仓库→连接；flows 可注入） |
+| `@gitlite/ui` | `<GitLiteSetup>` 引导配置（环境检测 → OAuth 登记/PAT 页面引导）+ `<GitLiteWizard>` 连接向导；flows 可注入 |
 
 ## 快速上手
 
@@ -54,6 +54,7 @@ const list = await db.collection('users').find({ age: { $gte: 18 } });
 REPL 与强类型生成：
 
 ```bash
+gitlite setup                            # 引导配置：检测 → OAuth 登记引导 / PAT 粘贴校验（一次登记全机生效）
 gitlite repl --db gitlite://github:<profile>@me/gitlite-repo/default
 gitlite> db.users.find({ age: { $gte: 18 } })   # 表达式求值，Tab 补全字段/操作符
 

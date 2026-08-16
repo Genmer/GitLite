@@ -9,7 +9,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w packages/core && npm run build -w packages/adapters-node && npm run build -w packages/codegen && npm run build -w packages/react && npm run build -w packages/ui && npm run build -w packages/sdk && npm run build -w packages/cli",
+    "build": "npm run build -w packages/core && npm run build -w packages/adapters-node && npm run build -w packages/codegen && npm run build -w packages/sdk && npm run build -w packages/react && npm run build -w packages/ui && npm run build -w packages/cli",
     "test": "npx vitest run",
     "test:core": "npx vitest run --coverage",
     "typecheck": "npx tsc -p packages/core --noEmit && npx tsc -p packages/adapters-node --noEmit && npx tsc -p packages/codegen --noEmit && npx tsc -p packages/react --noEmit && npx tsc -p packages/ui --noEmit && npx tsc -p packages/sdk --noEmit && npx tsc -p packages/cli --noEmit",

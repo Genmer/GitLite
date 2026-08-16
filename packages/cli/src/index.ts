@@ -6,6 +6,7 @@ import { watch } from 'node:fs';
 import { createNodeRuntime } from '@gitlite/adapters-node';
 import type { RuntimeAdapter } from '@gitlite/core';
 import { startRepl } from './repl.js';
+import { setupCmd } from './setup.js';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -25,6 +26,7 @@ export async function run(argv: string[]): Promise<number> {
       case 'sync': return await syncCmd(sub, args);
       case 'repl': return await replCmd(parseArgs(argv.slice(1)));      // 无子命令：不从 sub 位起步解析
       case 'codegen': return await codegenCmd(parseArgs(argv.slice(1)));
+      case 'setup': return await setupCmd(parseArgs(argv.slice(1)), runtime);
       case undefined:
       case 'help':
         printHelp();
@@ -234,6 +236,7 @@ usage:
   gitlite sync status|push|pull --db <uri>
   gitlite repl --db <uri>
   gitlite codegen [--schema ./_schema] [--out ./generated] [--watch]
+  gitlite setup [--check]              # 引导配置（OAuth 登记 / PAT，交互式）
 
 uri: gitlite://<provider>:<auth>@<owner>/<repo>/<database>`);
 }
