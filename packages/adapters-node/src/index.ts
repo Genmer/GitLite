@@ -14,7 +14,9 @@ export type { Runner, ExecResult } from './credentials.js';
 export { waitForRedirect, GITLITE_LOOPBACK_PORT };
 
 function expand(p: string): string {
-  return p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : p;
+  // GITLITE_HOME 可整体重定向数据根目录（默认 ~ 即用户主目录）；服务/沙箱写不了用户主目录时用它
+  const home = process.env.GITLITE_HOME || os.homedir();
+  return p.startsWith('~/') ? path.join(home, p.slice(2)) : p;
 }
 
 const nodeFs = {
@@ -24,7 +26,15 @@ const nodeFs = {
   async writeFile(file: string, data: string): Promise<void> {
     const f = expand(file);
     await fs.mkdir(path.dirname(f), { recursive: true });
-    await fs.writeFile(f, data, 'utf8');
+    // 写临时文件再原子改名覆盖：规避 Windows 下对已存在文件直接写被防病毒/锁拦截的 EPERM
+    const tmp = `${f}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, data, 'utf8');
+    try {
+      await fs.rename(tmp, f);
+    } catch (e) {
+      await fs.rm(tmp, { force: true }).catch(() => {});
+      throw e;
+    }
   },
   async appendFile(file: string, data: string): Promise<void> {
     const f = expand(file);

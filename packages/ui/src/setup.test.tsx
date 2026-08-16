@@ -149,4 +149,23 @@ describe('GitLiteSetup（引导配置）', () => {
     expect((screen.getByTestId('wizard-owner') as HTMLInputElement).value).toBe('alice'); // identity 预填
     expect(flows.getStoredToken).toHaveBeenCalledWith('gitee');
   });
+
+  it('已登录但 token 失效 → 徽标降级、隐藏「连接」、只留「重新登录」', async () => {
+    const flows = stubSetupFlows({
+      detect: vi.fn(async () => ({
+        github: { oauthApp: true, token: true },
+        gitee: { oauthApp: false, token: false }
+      })),
+      identity: vi.fn(async () => null), // 打开页面校验时识别不出 owner → 视为失效
+      getStoredToken: vi.fn(async () => 'stale-token')
+    });
+    render(<GitLiteSetup onReady={() => {}} flows={flows} />);
+    await waitFor(() => expect(screen.getByTestId('setup-choose')).toBeTruthy());
+    const gh = screen.getByTestId('setup-status-github');
+    expect(gh.textContent).toContain('⚠ 需重新登录');
+    expect(screen.queryByTestId('setup-connect-github')).toBeNull(); // 失效不再给「连接」
+    // 「重新登录」重跑 Device Flow → 进入向导登录步
+    await act(async () => { fireEvent.click(screen.getByTestId('setup-relogin-github')); });
+    await waitFor(() => expect(screen.getByTestId('wizard-login')).toBeTruthy());
+  });
 });

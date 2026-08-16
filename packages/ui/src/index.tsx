@@ -283,6 +283,8 @@ export function GitLiteSetup(props: {
   /** 出错前所在步：错误页「返回」回到来源表单（而非总回选择页） */
   const [backTo, setBackTo] = useState<'choose' | 'oauth' | 'pat'>('choose');
   const [wizardInit, setWizardInit] = useState<{ provider?: WizardProvider; token?: string; owner?: string }>({});
+  /** 已登录但 token 已失效的平台（打开页面时校验；失效 → 徽标降级 + 只留「重新登录」） */
+  const [invalid, setInvalid] = useState<Partial<Record<WizardProvider, boolean>>>({});
 
   const fail = (msg: string, from: 'choose' | 'oauth' | 'pat'): void => {
     setError(msg);
@@ -293,13 +295,27 @@ export function GitLiteSetup(props: {
   const refresh = async (): Promise<void> => {
     setPhase('detecting');
     try {
-      setStatus(await flows.detect());
+      const st = await flows.detect();
+      setStatus(st);
+      // 打开页面即校验「已登录」token 是否仍有效：失效 → 徽标降级并提示重新登录
+      const inv: Partial<Record<WizardProvider, boolean>> = {};
+      for (const p of ['github', 'gitee'] as const) {
+        if (st[p].token) {
+          const stored = (await flows.getStoredToken?.(p)) ?? '';
+          const owner = await flows.identity(p, stored).catch(() => null);
+          inv[p] = owner === null;
+        }
+      }
+      setInvalid(inv);
       setPhase('choose');
     } catch (e: any) {
       fail(String(e?.message ?? e), 'choose');
     }
   };
   useEffect(() => { void refresh(); }, []);
+
+  /** 重新登录：重跑 Device Flow/OAuth 覆盖失效 token（进入向导登录步） */
+  const relogin = (p: WizardProvider): void => { setWizardInit({ provider: p }); setPhase('wizard'); };
 
   const copy = async (): Promise<void> => {
     try {
@@ -367,7 +383,8 @@ export function GitLiteSetup(props: {
                 <b className="gl-platform-name">{PLATFORM_NAME[p]}</b>
                 {status && (
                   <span className="gl-pills">
-                    {badge(status[p].token, '已登录')}
+                    {status[p].token && !invalid[p] && badge(true, '已登录')}
+                    {status[p].token && invalid[p] && badge(false, '⚠ 需重新登录')}
                     {badge(status[p].oauthApp, 'OAuth 应用')}
                   </span>
                 )}
@@ -375,8 +392,16 @@ export function GitLiteSetup(props: {
               <div className="gl-actions">
                 {status && status[p].token ? (
                   <>
-                    <button className="gl-btn gl-btn-primary" data-testid={`setup-connect-${p}`} onClick={() => void connectNow(p)}>连接 {PLATFORM_NAME[p]}</button>
+                    {invalid[p] ? (
+                      <button className="gl-btn gl-btn-primary" data-testid={`setup-relogin-${p}`} onClick={() => relogin(p)}>重新登录 {PLATFORM_NAME[p]}</button>
+                    ) : (
+                      <button className="gl-btn gl-btn-primary" data-testid={`setup-connect-${p}`} onClick={() => void connectNow(p)}>连接 {PLATFORM_NAME[p]}</button>
+                    )}
                     <button className="gl-btn gl-btn-secondary" data-testid={`setup-pat-${p}`} onClick={() => { setProvider(p); setPat(''); setPhase('pat'); }}>使用私人令牌</button>
+                    {!invalid[p] && (
+                      <button className="gl-btn gl-btn-ghost" data-testid={`setup-relogin-${p}`} onClick={() => relogin(p)}>重新登录</button>
+                    )}
+                    <button className="gl-btn gl-btn-ghost" data-testid={`setup-oauth-${p}`} onClick={() => { setProvider(p); setClientId(''); setClientSecret(''); setCopied(false); setPhase('oauth'); }}>登记 OAuth 应用</button>
                   </>
                 ) : status && status[p].oauthApp ? (
                   <>

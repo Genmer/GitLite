@@ -114,6 +114,9 @@ TypeScript + isomorphic-git（跨 Node / 浏览器 / Electron），npm workspace
 
 ## 状态
 
-**v0.2 能力轨 + 功能轨全部完成，v0.3（格式冻结 1.0.0 / Codegen / React+UI）已落地**（2026-08-16）。
-门禁：**188 测试全绿（31 文件）· 覆盖率 lines 91.48% · 7 包 tsc strict 0 错 · golden-v1.0 冻结基线稳定**。实时进度以 [docs/progress.md](./docs/progress.md) 为准。
-待用户真机验证：Gitee OAuth 全链路（需注册 OAuth App）、mac/linux OS 钥匙串。
+**v0.2 能力轨 + 功能轨 + v0.3（格式冻结 1.0.0 / Codegen / React+UI / 引导配置模块）全部落地**（2026-08-16）。
+门禁：**203 测试全绿（33 文件）· 覆盖率 lines 91.47% · build/typecheck 0 错 · golden-v1.0 冻结基线稳定**。
+实时进度以 [docs/progress.md](./docs/progress.md) 为准。
+
+引导配置演示页已上线：`npx tsx examples/setup-page/server.ts` → http://127.0.0.1:4173（浏览器自助完成平台绑定/登录/建仓连接全链路；token 已过期时自动校验降级，提示重新登录）。
+待用户真机验证：mac/linux OS 钥匙串（security/secret-tool 实测）。

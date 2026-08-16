@@ -124,10 +124,13 @@ function App() {
   const [done, setDone] = useState<any>(null);
   if (done) {
     return (
-      <div className="card">
-        <h2>✅ 绑定并连接成功</h2>
+      <div className="gl-card gl-center">
+        <h2 className="gl-done">✅ 绑定并连接成功</h2>
         <p>OAuth/PAT 已绑定、token 在服务端凭据库、仓库已就绪（分支 gitlite/demo-db）。</p>
         <p>再次打开本页将显示两平台的绑定状态徽标；可点「跳过，直接连接」复验。</p>
+        <div className="gl-actions gl-foot">
+          <button className="gl-btn gl-btn-primary" onClick={() => setDone(null)}>回到主页</button>
+        </div>
       </div>
     );
   }

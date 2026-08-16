@@ -9,6 +9,23 @@ const TOKEN_ENDPOINT = 'https://github.com/login/oauth/access_token';
 // 当前（开发期）：优先读环境变量 GITLITE_DEVICE_CLIENT_ID / GITLITE_CLIENT_ID，便于真实链路测试。
 export const GITLITE_GITHUB_CLIENT_ID = 'gitlite-placeholder';
 
+/** Device Flow 请求超时：墙/网络不通时尽快失败，避免登录卡死（Host 层再给可执行提示） */
+const REQUEST_TIMEOUT_MS = 15_000;
+
+/** 带超时的 fetch：超时中止并抛普通 Error（避免出现误导性的 "aborted" 文案） */
+async function request(fetchFn: typeof fetch, url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetchFn(url, { ...init, signal: ctrl.signal });
+  } catch (e: any) {
+    if (ctrl.signal.aborted) throw new Error(`connect timeout (${REQUEST_TIMEOUT_MS / 1000}s 无响应): ${url} 不可达，请检查网络/代理`);
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export function resolveDeviceClientId(): string {
   return process.env.GITLITE_DEVICE_CLIENT_ID
     ?? process.env.GITLITE_CLIENT_ID
@@ -28,7 +45,7 @@ export async function deviceFlowLogin(
   const clientId = opts?.clientId ?? resolveDeviceClientId();
   const scope = opts?.scope ?? 'repo read:user';
   const sleep = opts?.sleep ?? defaultSleep;
-  const res = await fetchFn(DEVICE_ENDPOINT, {
+  const res = await request(fetchFn, DEVICE_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ client_id: clientId, scope })
@@ -42,7 +59,7 @@ export async function deviceFlowLogin(
   const deadline = Date.now() + 15 * 60 * 1000;
   while (Date.now() < deadline) {
     await sleep(interval);
-    const tokenRes = await fetchFn(TOKEN_ENDPOINT, {
+    const tokenRes = await request(fetchFn, TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({

@@ -26,7 +26,17 @@ export async function readAppConfig(runtime: RuntimeAdapter): Promise<AppConfig>
 export async function writeAppConfig(runtime: RuntimeAdapter, next: AppConfig): Promise<void> {
   const cur = await readAppConfig(runtime);
   const merged: AppConfig = { oauth: { ...cur.oauth, ...next.oauth } };
-  await runtime.fs.writeFile(CONFIG_PATH, JSON.stringify(merged, null, 2));
+  const data = JSON.stringify(merged, null, 2);
+  // Windows 下防病毒/瞬时占用写文件会间歇抛 EPERM：就地重试几次再放弃
+  for (let i = 0; i < 5; i++) {
+    try {
+      await runtime.fs.writeFile(CONFIG_PATH, data);
+      return;
+    } catch (e: any) {
+      if (e?.code !== 'EPERM' || i === 4) throw e;
+      await new Promise(r => setTimeout(r, 150 * (i + 1)));
+    }
+  }
 }
 
 /** 保存 OAuth 应用凭据（引导配置模块调用） */

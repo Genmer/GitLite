@@ -47,7 +47,9 @@ export class FileCredentialStore {
   }
 
   private expandDir(): string {
-    return this.dir.startsWith('~/') ? path.join(os.homedir(), this.dir.slice(2)) : this.dir;
+    // GITLITE_HOME 可整体重定向数据根目录（默认 ~ 即用户主目录）
+    const home = process.env.GITLITE_HOME || os.homedir();
+    return this.dir.startsWith('~/') ? path.join(home, this.dir.slice(2)) : this.dir;
   }
 
   async set(key: string, value: string): Promise<void> {

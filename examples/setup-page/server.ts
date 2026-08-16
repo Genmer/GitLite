@@ -4,6 +4,7 @@
 import * as http from 'node:http';
 import { exec } from 'node:child_process';
 import * as esbuild from 'esbuild';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -31,6 +32,49 @@ const startJob = (run: (job: Job) => Promise<void>): string => {
   void run(job).catch(e => { job.status = 'error'; job.error = String(e?.message ?? e); });
   return id;
 };
+
+// ---------- 网络问题检测（登录失败时给用户可执行的提示） ----------
+/** 判断是否为网络层错误（fetch failed / 超时 / DNS / 连接被拒等） */
+function isNetworkError(e: any): boolean {
+  const m = String(e?.message ?? e);
+  return /\b(fetch failed|network|could not|ECONN|ENETUNREACH|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|timeout|socket hang up)\b/i.test(m);
+}
+
+/** 探测某主机是否可达（5s 短超时；只判断网络通不通，不关心具体状态码） */
+async function probeReachable(url: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(url, { method: 'GET', signal: ctrl.signal, redirect: 'follow' });
+    clearTimeout(t);
+    return res.status < 500;
+  } catch { return false; }
+}
+
+/** 把登录失败错误翻译成对用户可执行的提示（尤其是网络/未登记 OAuth 应用） */
+async function describeLoginError(provider: 'github' | 'gitee', e: any): Promise<string> {
+  const raw = String(e?.message ?? e);
+  if (provider === 'github') {
+    // 占位/无效 Client ID → GitHub device 端点回 Not Found：页面应引导用户去登记 OAuth 应用
+    if (/device code request failed/i.test(raw) && /not found/i.test(raw)) {
+      return 'GitHub 未识别到你的 OAuth 应用（当前 Client ID 无效或未登记）。请按下面步骤登记后重试：\n'
+        + '1) 打开 https://github.com/settings/applications/new 注册 OAuth 应用；\n'
+        + '2) Homepage URL 与 Authorization callback URL 都填 http://localhost；\n'
+        + '3) 创建后回车进详情页，勾选 Enable Device Flow；\n'
+        + '4) 复制 Client ID，回到「登记 OAuth 应用」粘贴并保存；\n'
+        + '5) 再点「重新登录」即可。';
+    }
+    if (isNetworkError(e)) {
+      // GitHub Device Flow 第一步必须访问 github.com；国内常被墙（api.github.com 却可达）
+      const ghOk = await probeReachable('https://github.com');
+      if (!ghOk) {
+        return '无法访问 github.com（GitHub 登录需要访问它）。请先开启系统代理/VPN 后重试；若开启后仍失败，请把代理切换为「TUN 模式」（全局虚拟网卡），再点「重新登录」。';
+      }
+      return `网络异常（${raw}）。若刚开启代理请稍后重试。`;
+    }
+  }
+  return raw;
+}
 
 // ---------- API ----------
 async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
@@ -88,7 +132,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
           job.error = /EADDRINUSE/.test(String(e?.message ?? e))
             ? '回调端口 18365 被占用（可能仍有残留登录进程）——请稍候几秒重试'
             : /aborted/.test(String(e?.message ?? e)) ? '已取消（被新的登录尝试取代）'
-            : String(e?.message ?? e);
+            : await describeLoginError(provider, e);
         }
       });
       return send({ jobId: id });
@@ -127,6 +171,21 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
 
 // ---------- 页面打包与静态服务 ----------
 async function main(): Promise<void> {
+  // 数据根目录：优先 GITLITE_HOME；否则探测 ~/.gitlite 是否可写，不可写（沙箱/受限令牌）则回退系统临时目录，
+  // 保证页面仍能持久化配置/凭据（写发生在服务内部，expand() 在调用时读 GITLITE_HOME，此处设置即可生效）
+  if (!process.env.GITLITE_HOME) {
+    const { writeFileSync, mkdirSync, unlinkSync } = await import('node:fs');
+    const { homedir } = await import('node:os');
+    try {
+      const probeHome = join(homedir(), '.gitlite');
+      mkdirSync(probeHome, { recursive: true });
+      const probeFile = join(probeHome, `.probe-${process.pid}.tmp`);
+      writeFileSync(probeFile, 'x');
+      unlinkSync(probeFile);
+    } catch {
+      process.env.GITLITE_HOME = join(tmpdir(), 'gitlite-home');
+    }
+  }
   const built = await esbuild.build({
     entryPoints: [join(HERE, 'page.tsx')],
     bundle: true,
@@ -280,7 +339,7 @@ async function main(): Promise<void> {
   .gl-auth-open { display: inline-block; margin-top: 12px; text-decoration: none; }
   .gl-wait { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
   .gl-error { border-color: var(--bad); }
-  .gl-errmsg { color: var(--bad); font-size: 14px; margin: 0 0 4px; }
+  .gl-errmsg { color: var(--bad); font-size: 14px; margin: 0 0 4px; white-space: pre-line; }
   .gl-progress { color: var(--muted); margin: 10px 0 0; font-size: 13.5px; }
   .gl-spinner {
     width: 18px; height: 18px; border-radius: 50%; display: inline-block; vertical-align: -4px; margin-right: 8px;
