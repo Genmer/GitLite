@@ -108,12 +108,13 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       catch { return send({ login: null }); }
     }
     if (req.method === 'POST' && url.pathname === '/api/connect') {
-      const { provider: pv, owner, repo, database } = await body();
+      const { provider: pv, owner, repo, database, allowForeignRepo } = await body();
       if (!pv || !owner) return send({ error: 'provider/owner required' }, 400);
       const token = await runtime.credential.get(`gitlite:${pv}:default`);
       if (!token) return send({ error: `请先绑定 ${pv}（登录或 PAT）` }, 400);
       const db = await sdkConnect({
-        provider: pv, token, owner, repo: repo ?? 'gitlite-repo', database: database ?? 'demo-db'
+        provider: pv, token, owner, repo: repo ?? 'gitlite-repo', database: database ?? 'demo-db',
+        allowForeignRepo: !!allowForeignRepo
       } as any);
       await db.close(); // 演示页：真实连接在服务端完成（建仓/分支/bootstrap）后即关
       return send({ ok: true });
