@@ -58,7 +58,7 @@ describe('giteeLogin（OAuth 授权码 + loopback 全流程）', () => {
     expect(token).toBe('gitee-at');
     expect(await runtime.credential.get('gitlite:gitee:default')).toBe('gitee-at');
     // 换 token 请求形态
-    expect(fetchFn.calls[0]!.url).toBe('https://gitee.com/api/v5/oauth/token');
+    expect(fetchFn.calls[0]!.url).toBe('https://gitee.com/oauth/token');
     const body = new URLSearchParams(fetchFn.calls[0]!.init.body);
     expect(body.get('grant_type')).toBe('authorization_code');
     expect(body.get('code')).toBe('auth-code');

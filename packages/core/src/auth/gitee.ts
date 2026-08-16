@@ -6,7 +6,8 @@
 import { AuthError, NetworkError } from '../errors.js';
 
 export const GITEE_AUTHORIZE_URL = 'https://gitee.com/oauth/authorize';
-export const GITEE_TOKEN_URL = 'https://gitee.com/api/v5/oauth/token';
+/** token 端点在站点根（gitee.com/oauth/token），不在 /api/v5 下——v5 路径 POST 表单会 404 */
+export const GITEE_TOKEN_URL = 'https://gitee.com/oauth/token';
 
 // 开发期与 GitHub Device Flow 同模式：优先读环境变量，正式发布注册 GitLite 官方 App 后替换占位
 export const GITLITE_GITEE_CLIENT_ID = 'gitlite-placeholder';
@@ -100,7 +101,8 @@ async function tokenRequest(fetchFn: typeof fetch, params: Record<string, string
   }
   const data: any = await res.json().catch(() => null);
   if (!data?.access_token) {
-    throw new AuthError(`gitee oauth token error: ${data?.error ?? 'unknown'}${data?.error_description ? ` (${data.error_description})` : ''}`);
+    const detail = data?.error ?? data?.error_description ?? (data === null ? `HTTP ${res.status} non-JSON` : JSON.stringify(data).slice(0, 160));
+    throw new AuthError(`gitee oauth token error (HTTP ${res.status}): ${detail}`);
   }
   return {
     accessToken: data.access_token,

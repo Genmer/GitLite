@@ -43,7 +43,7 @@ describe('exchangeGiteeCode / refreshGiteeToken', () => {
       clientId: 'cid', code: 'c1', redirectUri: 'http://127.0.0.1:18365/callback'
     });
     expect(t).toEqual({ accessToken: 'at', refreshToken: 'rt', expiresIn: 86400, scope: 'projects' });
-    expect(f.last.url).toBe('https://gitee.com/api/v5/oauth/token');
+    expect(f.last.url).toBe('https://gitee.com/oauth/token');
     expect(f.last.init.method).toBe('POST');
     expect(f.last.init.headers['Content-Type']).toBe('application/x-www-form-urlencoded');
     const body = new URLSearchParams(f.last.init.body);
