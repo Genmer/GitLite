@@ -34,6 +34,8 @@
 4. 错误处理按错误码分支，全部是 `GitLiteError` 子类：`VALIDATION` `UNIQUE_CONSTRAINT` `NOT_FOUND` `CONFLICT`(含 expected/actual) `QUOTA` `RATE_LIMIT`(retryAfterMs) `AUTH` `NETWORK` `FORMAT_VERSION` `FOREIGN_REPO`
 5. 不要假设"写完其他端立刻可见"（最终一致，默认10分钟级）；需要强读用 `consistency: 'fresh'`
 6. filter/更新操作符是 Mongo 风格对象，禁止拼 SQL 或字符串查询
+7. 分发与集成：第三方应用一律通过标准 npm 包安装（`npm i @gitlite/sdk`）或 Git 远程 URL，严禁引导用户使用本地 tarball / 相对路径等临时开发手段
+8. 版本管理：7 包 Monorepo 升级统一使用 `npm run version:bump <version>`（见 `docs/15-npm-publish.md`），禁止手动修改单个 package.json
 
 ## 最小可用代码
 
@@ -85,6 +87,7 @@ await db.close(); // 退出前强制同步
 ## 文档地图
 
 - 使用与接入文档（本文件的 HTML 人读版）：docs/index.html
+- NPM 发布与版本升级指南：docs/15-npm-publish.md
 - 需求（FR 编号 A–K / NFR）：docs/requirements.md
 - 实施设计（接口契约）：docs/11-implementation-design.md
 - 需求-架构复核：docs/12-review-checklist.md

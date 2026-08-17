@@ -24,9 +24,10 @@
 | 2 | [docs/14-engine-parity-sqlite.md](docs/14-engine-parity-sqlite.md) | 内圈能力轨（P1a→P4），当前推进序列所在 |
 | 3 | [docs/13-limits-and-ceiling.md](docs/13-limits-and-ceiling.md) | 外圈物理天花板（平台配额→容量/延迟/吞吐/并发），立项红线 |
 | 4 | [docs/decisions.md](docs/decisions.md) | ADR-001 同步频率 / ADR-002 格式宪法 / ADR-003 字段级加密 |
-| 5 | [docs/11-implementation-design.md](docs/11-implementation-design.md)、[docs/12-review-checklist.md](docs/12-review-checklist.md) | 架构设计 + 复核清单 |
-| 6 | [docs/requirements.md](docs/requirements.md) | 需求基线（用户故事 / FR / NFR / MVP 边界） |
-| 7 | `packages/core/src/` | 核心代码（client / sync / storage / query / index / tx / crypto） |
+| 5 | [docs/15-npm-publish.md](docs/15-npm-publish.md) | NPM 发布与版本升级指南（7 包版本同步、拓扑顺序发布、Scope 规范） |
+| 6 | [docs/11-implementation-design.md](docs/11-implementation-design.md)、[docs/12-review-checklist.md](docs/12-review-checklist.md) | 架构设计 + 复核清单 |
+| 7 | [docs/requirements.md](docs/requirements.md) | 需求基线（用户故事 / FR / NFR / MVP 边界） |
+| 8 | `packages/core/src/` | 核心代码（client / sync / storage / query / index / tx / crypto） |
 | — | [project_memory.md](project_memory.md) | 设计期记忆存档；与 docs/ 冲突时以 docs/ 为准 |
 
 ## 3. 硬原则（不可违反）
@@ -36,14 +37,19 @@
 - **加密在 commit/pull 边界（ADR-003）**：镜像/基线/diff 必须明文（随机 IV 会让密文 diff 不稳）；加密字段禁索引/唯一/复合。
 - **core 零 node 内置依赖**：一切经 RuntimeAdapter 注入（fs/crypto/credential/fetch）；WebCrypto 用 `globalThis.crypto.subtle`。
 - **平台配额是硬约束**：GitHub 内容创建 500 次/h 是写吞吐真瓶颈；不复刻「秒级同步」。
+- **NPM 多包版本同步（docs/15）**：严禁手动逐个改 7 包 package.json，必须统一使用 `npm run version:bump <version>` 同步升级并自动对齐内部依赖；发布使用 `npm run release:publish` 遵循拓扑顺序。
 
-## 4. 验证命令（工作目录 = 仓库根）
+## 4. 验证与发布命令（工作目录 = 仓库根）
 
 | 命令 | 用途 |
 |---|---|
 | `npx vitest run` | 全量测试 |
 | `npx vitest run --coverage` | 覆盖率（看 All files lines，门槛 ≥80%） |
-| `npm run typecheck` | 4 包 tsc strict，0 错误 |
+| `npm run typecheck` | 7 包 tsc strict，0 错误 |
+| `npm run release:check` | 检查 7 个子包版本与内部依赖一致性 |
+| `npm run version:bump <ver>` | 一键同步升级所有包版本号及跨包依赖（如 `npm run version:bump 0.2.0`） |
+| `npm run release:dry-run` | 模拟编译并按序发布预检（不消耗配额） |
+| `npm run release:publish` | 真实按拓扑依赖顺序编译并发布到 NPM |
 
 测试文件与源码同目录（如 `src/crypto/cipher.test.ts` 测 `cipher.ts`）。
 

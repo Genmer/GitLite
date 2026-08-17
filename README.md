@@ -98,6 +98,7 @@ const { items, loading } = useFind(db, 'users', { age: { $gte: 18 } }); // 远�
 | 12 | [复核清单](./docs/12-review-checklist.md) | 需求-架构逐条复核：0 缺口 / 6 实现注意项 |
 | 13 | [天花板与红线](./docs/13-limits-and-ceiling.md) | 外圈：平台配额推演容量/延迟/吞吐/并发四维极限；功能轨状态 |
 | 14 | [引擎对标 SQLite](./docs/14-engine-parity-sqlite.md) | 内圈：引擎能力逐项对标 + P1a→P4 补齐序列（已全部落地） |
+| 15 | [NPM 发布与版本指南](./docs/15-npm-publish.md) | 7 包 Monorepo 版本同步、发布拓扑顺序、NPM Scope 规范与发布脚本 |
 | ADR | [技术决策记录](./docs/decisions.md) | ADR-001 同步频率 / ADR-002 格式宪法（**1.0.0 已冻结**）/ ADR-003 字段级加密 |
 | REQ | [需求基线](./docs/requirements.md) | 用户故事 / FR / NFR / MVP 边界 |
 | PROG | [开发进度](./docs/progress.md) | **唯一进度入口**：阶段状态、里程碑、质量门禁、变更日志 |

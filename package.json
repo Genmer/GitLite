@@ -13,7 +13,11 @@
     "test": "npx vitest run",
     "test:core": "npx vitest run --coverage",
     "typecheck": "npx tsc -p packages/core --noEmit && npx tsc -p packages/adapters-node --noEmit && npx tsc -p packages/codegen --noEmit && npx tsc -p packages/react --noEmit && npx tsc -p packages/ui --noEmit && npx tsc -p packages/sdk --noEmit && npx tsc -p packages/cli --noEmit",
-    "pack:check": "cd packages/core && npm pack --dry-run && cd ../.. && cd packages/sdk && npm pack --dry-run && cd ../.."
+    "pack:check": "cd packages/core && npm pack --dry-run && cd ../.. && cd packages/sdk && npm pack --dry-run && cd ../..",
+    "version:bump": "node scripts/release.mjs bump",
+    "release:check": "node scripts/release.mjs check",
+    "release:publish": "node scripts/release.mjs publish",
+    "release:dry-run": "node scripts/release.mjs publish --dry-run"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
