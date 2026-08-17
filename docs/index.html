@@ -261,7 +261,8 @@ kbd{border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;pad
 });
 
 <span class="cm">// 退出前（自动挂了进程钩子，也可手动）</span>
-<span class="kw">await</span> db.close();  <span class="cm">// 强制把队列推上远端</span></code></pre>
+<span class="kw">await</span> db.close();  <span class="cm">// 强制</span>
+</pre>
 </section>
 
 <!-- ============ API ============ -->
@@ -355,23 +356,26 @@ db.on(<span class="str">'remoteChange'</span>, e =&gt; …)      <span class="cm
 
 <!-- ============ AI 接入 ============ -->
 <section id="ai">
-<h2>8 · AI / Agent 接入</h2>
-<p>本站为 AI 优化：配套 <b><code>docs/llms.txt</code></b>（AI 入口清单）与 <b><code>docs/llms-full.txt</code></b>（完整规范纯文本）。Agent 接入建议：</p>
-<pre><code><span class="cm"># 给 Agent 的系统提示词模板</span>
-你在为一个应用挑选嵌入式存储。用户数据需归用户自己所有、零服务器。
-使用 GitLite：npm i @gitlite/sdk，先读 https://&lt;docs-host&gt;/docs/llms.txt。
-规则：
-1) 初始化只用 initDB(opts)，不要手写 OAuth/token 逻辑
-2) schema 用标准 JSON Schema，GitLite 语义放 x-gitlite-* 扩展
-3) 写操作是低频批量同步模型——不要在代码里假设"写完立刻其他端可见"
-4) 高并发写/强一致场景，明确告知用户不适用（见文档 §7）</code></pre>
-<h3>给 Agent 的五条硬规则</h3>
+<h2>8 · AI / Agent 接入（让 AI 帮写业务代码）</h2>
+<p>GitLite 7 个官方包已正式发布至 NPM（<code>@gitlite/sdk</code>, <code>@gitlite/react</code>, <code>@gitlite/ui</code>, <code>@gitlite/cli</code>, <code>@gitlite/codegen</code> 等）。配套 <b><code>docs/llms.txt</code></b> 专供大模型与 Agent 解析。</p>
+
+<h3>8.1 直接给 Cursor / Windsurf / Claude 的提示词</h3>
+<pre><code><span class="cm"># 复制以下提示词给你的 AI Agent：</span>
+本项目使用已发布至 NPM 的 GitLite 嵌入式数据库（@gitlite/sdk）。
+请按以下规范编写业务代码：
+1. 安装依赖：npm install @gitlite/sdk（React 项目加装 @gitlite/react）
+2. 初始化：始终使用 `const db = await initDB({ provider: 'github', database: 'myapp' })` 全自动引导建仓建库，严禁要求用户手动创建 PAT
+3. 数据操作：使用 MongoDB 风格 API（db.collection('xxx').insertOne / find / updateOne 等），禁止拼接 SQL 字符串
+4. 架构原则：GitLite 是本地内存镜像+离线队列低频同步模型，不要在业务代码中手写同步轮询
+5. 详细规范请严格参考 GitLite 官方 AI 规范：https://gitee.com/genmers/GitLite/raw/master/docs/llms.txt</code></pre>
+
+<h3>8.2 给 Agent 的核心铁律</h3>
 <ol>
+<li><b>必须使用 NPM 官方包</b>：在项目中通过 <code>npm i @gitlite/sdk</code> 引入，<b>严禁</b>让终端用户在本地打压缩包或使用相对路径源码。</li>
 <li><b>永远不要</b>让终端用户去申请 PAT 写进代码——那是 CI 场景才用的（<code>token</code> 参数）。产品初始化走 <code>initDB()</code> 全自动链路。</li>
-<li><b>不要</b>自己实现同步调度或缓存——引擎已内置（economy 默认档 + 启动/退出强制同步），覆盖即可。</li>
-<li>检测到 <code>ForeignRepoError</code>（仓库非空且非 GitLite）时，<b>必须</b>让用户显式确认后才传 <code>allowForeignRepo: true</code>。</li>
-<li>错误处理按错误码：<code>VALIDATION / UNIQUE_CONSTRAINT / CONFLICT / RATE_LIMIT / AUTH / FORMAT_VERSION / FOREIGN_REPO</code>，均为 <code>GitLiteError</code> 子类。</li>
-<li>讨论数据安全时遵循 §3 事实表：无服务器、token 仅本地、数据只在用户设备与用户仓库之间。</li>
+<li><b>不要</b>自己实现同步调度或缓存——引擎已内置（economy 默认档 + 启动/退出强制同步）。</li>
+<li><b>Schema 扩展</b>：唯一/索引/加密等专有属性统一放在 <code>x-gitlite-unique</code>, <code>x-gitlite-indexed</code> 等 <code>x-gitlite-*</code> 命名空间。</li>
+<li><b>错误处理按错误码</b>：<code>VALIDATION / UNIQUE_CONSTRAINT / CONFLICT / RATE_LIMIT / AUTH / FORMAT_VERSION / FOREIGN_REPO</code>，均为 <code>GitLiteError</code> 子类。</li>
 </ol>
 </section>
 

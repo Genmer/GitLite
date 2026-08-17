@@ -1,7 +1,6 @@
 # GitLite
 
-> GitLite 是一个嵌入式云端数据库 SDK：把用户自己的私有 Git 仓库（GitHub / Gitee）当作数据库使用。零服务器、零后端——它是被编译进宿主应用的一段 TypeScript 代码（对标 SQLite 的"链接进程序"哲学）。数据只存在两处：用户自己的设备、用户自己的私有仓库。GitLite 项目方没有服务器，接触不到任何用户数据。
-> npm 包：`@gitlite/sdk`（另有 `@gitlite/core` 引擎、`@gitlite/adapters-node`、`@gitlite/cli`）。语言 TypeScript，许可证 MIT，当前版本 v0.1（格式 0.x 实验期）。
+> 官方已发布 NPM（7 包全部上线）：`@gitlite/sdk`（业务主入口）、`@gitlite/react`（React Hooks）、`@gitlite/ui`（向导组件）、`@gitlite/cli`（命令行与REPL）、`@gitlite/codegen`（强类型生成）、`@gitlite/adapters-node`（Node环境适配）、`@gitlite/core`（纯跨平台引擎内核）。许可证 MIT。
 
 ## 适用判断（先读这个）
 
