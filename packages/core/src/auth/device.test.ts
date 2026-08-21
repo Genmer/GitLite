@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { deviceFlowLogin } from './device.js';
-import { AuthError } from '../errors.js';
+import { AuthError, OAuthAppNotConfiguredError } from '../errors.js';
 
 function mockFetch(steps: Array<{ body: any }>): typeof fetch {
   let i = 0;
@@ -15,6 +15,14 @@ const slept: number[] = [];
 const fakeSleep = async (ms: number) => { slept.push(ms); };
 
 describe('Device Flow（FR B1）', () => {
+  it('未配置 clientId / 占位符时直接抛出 OAuthAppNotConfiguredError', async () => {
+    const f = mockFetch([]);
+    await expect(deviceFlowLogin(f, { onCode: () => {} }, { clientId: 'gitlite-placeholder' }))
+      .rejects.toThrowError(OAuthAppNotConfiguredError);
+    await expect(deviceFlowLogin(f, { onCode: () => {} }, { clientId: '' }))
+      .rejects.toThrowError(OAuthAppNotConfiguredError);
+  });
+
   it('pending → token；回调拿到 user_code', async () => {
     const onCode = vi.fn();
     const f = mockFetch([
@@ -22,7 +30,7 @@ describe('Device Flow（FR B1）', () => {
       { body: { error: 'authorization_pending' } },
       { body: { access_token: 'tok123' } }
     ]);
-    const { token } = await deviceFlowLogin(f, { onCode }, { sleep: noSleep });
+    const { token } = await deviceFlowLogin(f, { onCode }, { clientId: 'real-client-id', sleep: noSleep });
     expect(token).toBe('tok123');
     expect(onCode).toHaveBeenCalledWith('ABCD-1234', 'https://github.com/login/device');
   });
@@ -34,7 +42,7 @@ describe('Device Flow（FR B1）', () => {
       { body: { error: 'slow_down' } },
       { body: { access_token: 'ok' } }
     ]);
-    expect((await deviceFlowLogin(f1, { onCode: () => {} }, { sleep: fakeSleep })).token).toBe('ok');
+    expect((await deviceFlowLogin(f1, { onCode: () => {} }, { clientId: 'real-client-id', sleep: fakeSleep })).token).toBe('ok');
     expect(slept[0]).toBe(1000);   // 初始 interval 1s
     expect(slept[1]).toBe(6000);   // slow_down +5s
 
@@ -42,7 +50,8 @@ describe('Device Flow（FR B1）', () => {
       { body: { device_code: 'd', user_code: 'X', verification_uri: 'u', interval: 0 } },
       { body: { error: 'expired_token' } }
     ]);
-    await expect(deviceFlowLogin(f2, { onCode: () => {} }, { sleep: noSleep }))
+    await expect(deviceFlowLogin(f2, { onCode: () => {} }, { clientId: 'real-client-id', sleep: noSleep }))
       .rejects.toBeInstanceOf(AuthError);
   });
 });
+

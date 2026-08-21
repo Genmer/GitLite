@@ -1,6 +1,7 @@
 // loopback 回调接收测试：真实本地 socket（127.0.0.1 + 随机端口），不 mock
 import { describe, expect, it } from 'vitest';
-import { waitForRedirect, GITLITE_LOOPBACK_PORT } from './loopback.js';
+import { waitForRedirect, GITLITE_LOOPBACK_PORT, renderOAuthSuccessHtml } from './loopback.js';
+
 
 describe('waitForRedirect（loopback 接收器）', () => {
   it('接收回调：回执 200 + 解析 query + 端口透出', async () => {
@@ -49,7 +50,16 @@ describe('waitForRedirect（loopback 接收器）', () => {
     await expect(waitForRedirect({ port: 0, signal: controller.signal })).rejects.toThrow(/aborted/);
   });
 
+  it('renderOAuthSuccessHtml 生成包含样式、复制按钮与安全代码的完整 HTML', () => {
+    const html = renderOAuthSuccessHtml({ code: 'test-oauth-code-123', appName: 'Memex' });
+    expect(html).toContain('Memex');
+    expect(html).toContain('test-oauth-code-123');
+    expect(html).toContain('网页授权已通过');
+    expect(html).toContain('navigator.clipboard.writeText');
+  });
+
   it('默认端口常量存在（docs/04 固定 loopback 端口）', () => {
     expect(GITLITE_LOOPBACK_PORT).toBe(18365);
   });
 });
+

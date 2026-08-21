@@ -11,7 +11,7 @@ import { SyncEngine } from './sync/engine.js';
 import { CommitQueue } from './sync/queue.js';
 import { TransactionManager } from './tx/transaction.js';
 import { QuotaTracker } from './quota/tracker.js';
-import { SYS, type CreateRepoInput, type RepoRef, type SyncPolicy } from './types.js';
+import { SYS, type CreateRepoInput, type RepoRef, type SyncPolicy, type SyncState } from './types.js';
 
 /** 连接流程步骤（initDB 向导 UI 依据这些事件渲染进度） */
 export type ConnectStep =
@@ -34,6 +34,8 @@ export interface ConnectOptions {
   /** 索引后端（P4，docs/14）：'memory'（默认，行为不变）/ 'sqlite'（本地分页缓存，
    *  需 runtime.sqlite；缓存位于 ~/.gitlite/cache/<连接指纹>/index.db，可随时删除重建） */
   indexBackend?: 'memory' | 'sqlite';
+  /** 初始化后是否自动拉取远端最新状态（默认 true） */
+  autoPullOnInit?: boolean;
   /** 进度回调（向导 UI 双通道：内置 UI 与自建页面共用） */
   onProgress?: (step: ConnectStep, detail?: any) => void;
 }
@@ -129,8 +131,30 @@ export class GitLiteClient {
 
     p?.('startup', { bootstrap: !isGitLite });
     await client.sync.startup(files ?? new Map());
+    if (opts.autoPullOnInit !== false && isGitLite) {
+      await client.sync.pull();
+    }
     p?.('ready', { branch, database: opts.database ?? null });
     return client;
+  }
+
+  get state(): SyncState {
+    return this.sync.getState();
+  }
+
+  /** 主动双向同步：拉取最新远端变更 + 立即推送本地增量（Memex 生产最佳实践） */
+  async syncNow(): Promise<{ pushed: boolean; pulled: boolean }> {
+    this.assertOpen();
+    const prevHead = this.sync.status().remoteHeadOid;
+    await this.sync.pull();
+    const afterPullHead = this.sync.status().remoteHeadOid;
+    const pulled = prevHead !== afterPullHead;
+
+    const hadPending = this.sync.status().pendingOps > 0 || this.storage.diff().length > 0;
+    await this.sync.flush();
+    const pushed = hadPending;
+
+    return { pushed, pulled };
   }
 
   collection<T = any>(name: string): Collection<T> {

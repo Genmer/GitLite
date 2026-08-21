@@ -3,7 +3,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 import {
   giteeAuthorizeUrl, exchangeGiteeCode, refreshGiteeToken, resolveGiteeClientId, resolveGiteeClientSecret
 } from './gitee.js';
-import { AuthError } from '../errors.js';
+import { AuthError, OAuthAppNotConfiguredError } from '../errors.js';
 
 /** 记录 (url, init) 的 mock fetch */
 function mockFetch(body: any, status = 200): typeof fetch & { last: { url: string; init: any } } {
@@ -18,6 +18,13 @@ function mockFetch(body: any, status = 200): typeof fetch & { last: { url: strin
 }
 
 describe('giteeAuthorizeUrl', () => {
+  it('未配置 clientId / 占位符时直接抛出 OAuthAppNotConfiguredError', () => {
+    expect(() => giteeAuthorizeUrl({ clientId: 'gitlite-placeholder', redirectUri: 'http://127.0.0.1:18365/callback', state: 's1' }))
+      .toThrowError(OAuthAppNotConfiguredError);
+    expect(() => giteeAuthorizeUrl({ clientId: '', redirectUri: 'http://127.0.0.1:18365/callback', state: 's1' }))
+      .toThrowError(OAuthAppNotConfiguredError);
+  });
+
   it('必选参数 + scope；PKCE 可选时附 method', () => {
     const base = giteeAuthorizeUrl({ clientId: 'cid', redirectUri: 'http://127.0.0.1:18365/callback', state: 's1', scope: 'projects user_info' });
     const u = new URL(base);
@@ -35,6 +42,7 @@ describe('giteeAuthorizeUrl', () => {
     expect(pkce.searchParams.get('code_challenge_method')).toBe('S256');
   });
 });
+
 
 describe('exchangeGiteeCode / refreshGiteeToken', () => {
   it('表单体换 token；成功映射字段；secret/verifier 可选透传', async () => {
@@ -91,3 +99,5 @@ describe('resolveGiteeClientId / resolveGiteeClientSecret', () => {
     expect(resolveGiteeClientSecret()).toBe('sec');
   });
 });
+
+

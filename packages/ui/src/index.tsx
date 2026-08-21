@@ -507,3 +507,427 @@ export function GitLiteSetup(props: {
       );
   }
 }
+
+/** 开箱即用全响应式移动端与暗黑主题 CSS 样式表 */
+export const GITLITE_UI_CSS = `
+:root {
+  --gl-bg: #f4f5fa;
+  --gl-bg-grad: radial-gradient(1200px 500px at 50% -100px, #e4e9ff66, transparent);
+  --gl-card: #ffffff;
+  --gl-text: #16181d;
+  --gl-muted: #6b7280;
+  --gl-border: #e5e7eb;
+  --gl-border-soft: #eceef3;
+  --gl-accent: #4f46e5;
+  --gl-accent-2: #6366f1;
+  --gl-accent-weak: #eef0ff;
+  --gl-accent-ring: rgba(79, 70, 229, 0.2);
+  --gl-ok: #0a7d43;
+  --gl-ok-weak: #e7f7ef;
+  --gl-bad: #b42318;
+  --gl-bad-weak: #feeceb;
+  --gl-mono-bg: #f8f9fc;
+  --gl-shadow: 0 1px 3px rgba(16, 24, 40, 0.06), 0 8px 24px rgba(16, 24, 40, 0.08);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gl-bg: #0e1015;
+    --gl-bg-grad: radial-gradient(1200px 500px at 50% -100px, rgba(79, 70, 229, 0.15), transparent);
+    --gl-card: #171a21;
+    --gl-text: #e8eaf0;
+    --gl-muted: #9aa1ad;
+    --gl-border: #262b36;
+    --gl-border-soft: #20242e;
+    --gl-accent: #818cf8;
+    --gl-accent-2: #a5b4fc;
+    --gl-accent-weak: rgba(79, 70, 229, 0.15);
+    --gl-accent-ring: rgba(129, 140, 248, 0.25);
+    --gl-ok: #4ade80;
+    --gl-ok-weak: rgba(10, 125, 67, 0.15);
+    --gl-bad: #f87171;
+    --gl-bad-weak: rgba(180, 35, 24, 0.15);
+    --gl-mono-bg: #10131a;
+    --gl-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+* { box-sizing: border-box; }
+.gl-card {
+  background: var(--gl-card);
+  border: 1px solid var(--gl-border);
+  border-radius: 16px;
+  padding: 24px 24px 20px;
+  box-shadow: var(--gl-shadow);
+  margin-bottom: 16px;
+  color: var(--gl-text);
+  transition: all 0.2s ease;
+}
+.gl-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--gl-text); }
+.gl-sub { margin: 0 0 18px; color: var(--gl-muted); font-size: 13.5px; line-height: 1.5; }
+.gl-center { text-align: center; padding: 40px 20px; color: var(--gl-muted); }
+.gl-done { color: var(--gl-ok); font-size: 18px; font-weight: 700; }
+
+.gl-platform {
+  border: 1px solid var(--gl-border-soft);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+  background: var(--gl-card);
+}
+.gl-platform-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.gl-platform-name { font-size: 15.5px; font-weight: 700; color: var(--gl-text); }
+.gl-pills { display: inline-flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.gl-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--gl-mono-bg);
+  color: var(--gl-text);
+  flex: none;
+}
+.gl-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.gl-pill-ok { background: var(--gl-ok-weak); color: var(--gl-ok); font-weight: 600; }
+.gl-pill-no { background: var(--gl-mono-bg); color: var(--gl-muted); }
+
+.gl-btn {
+  cursor: pointer;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 11px 18px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.gl-btn:active { transform: scale(0.98); }
+.gl-btn:focus-visible { outline: 2px solid var(--gl-accent); outline-offset: 2px; }
+.gl-btn-primary { background: var(--gl-accent); color: #fff; box-shadow: 0 4px 12px var(--gl-accent-ring); }
+.gl-btn-primary:hover { background: var(--gl-accent-2); }
+.gl-btn-secondary { background: var(--gl-card); color: var(--gl-accent); border-color: var(--gl-accent); }
+.gl-btn-secondary:hover { background: var(--gl-accent-weak); }
+.gl-btn-ghost { background: transparent; color: var(--gl-muted); }
+.gl-btn-ghost:hover { color: var(--gl-text); background: var(--gl-mono-bg); }
+.gl-btn-mini { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; background: var(--gl-accent-weak); color: var(--gl-accent); }
+.gl-btn-mini:hover { background: var(--gl-accent); color: #fff; }
+.gl-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.gl-foot { margin-top: 8px; text-align: center; }
+
+.gl-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gl-choice {
+  cursor: pointer;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--gl-border);
+  background: var(--gl-card);
+  color: var(--gl-text);
+  transition: all 0.15s ease;
+}
+.gl-choice:hover { border-color: var(--gl-accent); background: var(--gl-accent-weak); }
+
+.gl-steps { margin: 0 0 16px; padding: 0; list-style: none; counter-reset: step; }
+.gl-steps li { counter-increment: step; position: relative; padding: 0 0 14px 38px; font-size: 14px; color: var(--gl-text); }
+.gl-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--gl-accent-weak);
+  color: var(--gl-accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.gl-steps li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 28px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--gl-border);
+}
+
+.gl-callback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  background: var(--gl-mono-bg);
+  border: 1px dashed var(--gl-accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.gl-callback code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; word-break: break-all; color: var(--gl-accent); }
+.gl-link { color: var(--gl-accent); word-break: break-all; text-underline-offset: 3px; }
+.gl-link:hover { text-decoration: none; }
+
+.gl-form { display: grid; gap: 6px; }
+.gl-field { font-size: 13px; color: var(--gl-muted); display: grid; gap: 6px; }
+.gl-input {
+  font: inherit;
+  font-size: 14px;
+  padding: 11px 14px;
+  width: 100%;
+  border: 1px solid var(--gl-border);
+  border-radius: 10px;
+  background: var(--gl-card);
+  color: var(--gl-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.gl-input:focus { outline: none; border-color: var(--gl-accent); box-shadow: 0 0 0 3px var(--gl-accent-ring); }
+.gl-input::placeholder { color: var(--gl-muted); opacity: 0.6; }
+
+.gl-hintbox {
+  background: var(--gl-accent-weak);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px;
+  word-break: break-all;
+  margin: 0 0 8px;
+  color: var(--gl-accent);
+}
+.gl-auth-open { display: inline-block; margin-top: 12px; text-decoration: none; }
+.gl-wait { color: var(--gl-muted); font-size: 13px; margin: 12px 0 0; }
+.gl-error { border-color: var(--gl-bad); }
+.gl-errmsg { color: var(--gl-bad); font-size: 14px; margin: 0 0 8px; white-space: pre-line; }
+.gl-progress { color: var(--gl-muted); margin: 10px 0 0; font-size: 13.5px; }
+.gl-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: -4px;
+  margin-right: 8px;
+  border: 2.5px solid var(--gl-accent-ring);
+  border-top-color: var(--gl-accent);
+  animation: gl-spin 0.8s linear infinite;
+}
+@keyframes gl-spin { to { transform: rotate(360deg); } }
+
+/* 📱 深度移动端触摸与视口深度适配（不是简单拉伸） */
+@media (max-width: 640px) {
+  .gl-card {
+    padding: 18px 16px 16px !important;
+    border-radius: 16px !important;
+    margin-bottom: 12px !important;
+  }
+  .gl-title { font-size: 16px !important; }
+  .gl-sub { font-size: 13px !important; margin-bottom: 14px !important; }
+  .gl-platform { padding: 14px 12px !important; border-radius: 12px !important; }
+  .gl-platform-head { gap: 8px !important; }
+  .gl-pills {
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-top: 4px !important;
+    justify-content: flex-start !important;
+  }
+  .gl-choices { grid-template-columns: 1fr !important; gap: 10px !important; }
+  .gl-choice {
+    padding: 16px 12px !important;
+    min-height: 48px !important;
+    font-size: 14px !important;
+  }
+  .gl-actions {
+    flex-direction: column !important;
+    gap: 8px !important;
+    margin-top: 14px !important;
+  }
+  .gl-actions .gl-btn {
+    width: 100% !important;
+    min-height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    font-size: 14px !important;
+    padding: 12px 14px !important;
+  }
+  .gl-btn {
+    min-height: 44px !important;
+    font-size: 14px !important;
+    padding: 12px 16px !important;
+  }
+  /* 解决 iOS Safari 输入框聚焦时强制缩放页面的顽疾（font-size >= 16px） */
+  .gl-input {
+    font-size: 16px !important;
+    padding: 12px 14px !important;
+    min-height: 44px !important;
+  }
+  .gl-callback {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .gl-callback code {
+    font-size: 12px !important;
+    word-break: break-all !important;
+  }
+  .gl-callback .gl-btn-mini {
+    width: 100% !important;
+    min-height: 38px !important;
+    padding: 8px 12px !important;
+    text-align: center !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  .gl-steps li {
+    padding: 0 0 16px 32px !important;
+    font-size: 13px !important;
+  }
+  .gl-steps li::before {
+    width: 20px !important;
+    height: 20px !important;
+    font-size: 11px !important;
+  }
+  .gl-steps li:not(:last-child)::after {
+    left: 10px !important;
+    top: 24px !important;
+  }
+  .gl-hintbox {
+    font-size: 12px !important;
+    padding: 10px 12px !important;
+  }
+}
+
+/* GitLite Capsule 状态胶囊 */
+.gl-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: var(--gl-card-bg, #ffffff);
+  border: 1px solid var(--gl-border, #e2e8f0);
+  border-radius: 9999px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: var(--gl-text, #1e293b);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+  .gl-capsule {
+    background: var(--gl-card-bg, #1e293b);
+    border-color: var(--gl-border, #334155);
+    color: var(--gl-text, #f8fafc);
+  }
+}
+.gl-capsule-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.gl-capsule-dot-synced {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+.gl-capsule-dot-syncing {
+  background: #3b82f6;
+  animation: gl-pulse 1.2s infinite;
+}
+.gl-capsule-dot-connecting {
+  background: #f59e0b;
+  animation: gl-pulse 1.2s infinite;
+}
+.gl-capsule-dot-offline {
+  background: #94a3b8;
+}
+.gl-capsule-dot-error {
+  background: #ef4444;
+}
+.gl-capsule-state {
+  font-weight: 500;
+}
+.gl-capsule-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 4px;
+  color: #64748b;
+  font-family: ui-monospace, monospace;
+}
+.gl-capsule-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  margin-left: 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #3b82f6;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.gl-capsule-sync-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.1);
+}
+.gl-capsule-sync-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.gl-spin {
+  animation: gl-spin-anim 1s linear infinite;
+}
+@keyframes gl-spin-anim {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes gl-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+`;
+
+/** 自动注入 GitLite UI 样式表的 React 辅助组件 */
+export function GitLiteStyleInjector() {
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const id = 'gitlite-ui-styles';
+    if (!document.getElementById(id)) {
+      const style = document.createElement('style');
+      style.id = id;
+      style.textContent = GITLITE_UI_CSS;
+      document.head.appendChild(style);
+    }
+  }, []);
+  return null;
+}
+
+export { GitLiteCapsule, type GitLiteCapsuleProps } from './capsule.js';
+

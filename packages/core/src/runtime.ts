@@ -46,3 +46,5 @@ export interface RuntimeAdapter {
   /** 可选：本地 SQLite 索引后端（P4）；缺省 = 纯内存索引 */
   sqlite?: SqliteAdapterFactory;
 }
+
+export * from './runtime/browser.js';

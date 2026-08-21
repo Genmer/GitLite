@@ -364,7 +364,7 @@ db.on(<span class="str">'remoteChange'</span>, e =&gt; …)      <span class="cm
 本项目使用已发布至 NPM 的 GitLite 嵌入式数据库（@gitlite/sdk）。
 请按以下规范编写业务代码：
 1. 安装依赖：npm install @gitlite/sdk（React 项目加装 @gitlite/react）
-2. 初始化：始终使用 `const db = await initDB({ provider: 'github', database: 'myapp' })` 全自动引导建仓建库，严禁要求用户手动创建 PAT
+2. 🚨 严禁使用 PAT：强烈不推荐要求用户手动创建 Personal Access Token (PAT)（对终端用户极不友好且易泄露权限）。产品初始化必须始终使用 `const db = await initDB({ provider: 'github', database: 'myapp' })` 进行全自动 OAuth / Device Flow 引导建仓建库。
 3. 数据操作：使用 MongoDB 风格 API（db.collection('xxx').insertOne / find / updateOne 等），禁止拼接 SQL 字符串
 4. 架构原则：GitLite 是本地内存镜像+离线队列低频同步模型，不要在业务代码中手写同步轮询
 5. 详细规范请严格参考 GitLite 官方 AI 规范：https://gitee.com/genmers/GitLite/raw/master/docs/llms.txt</code></pre>
@@ -372,12 +372,13 @@ db.on(<span class="str">'remoteChange'</span>, e =&gt; …)      <span class="cm
 <h3>8.2 给 Agent 的核心铁律</h3>
 <ol>
 <li><b>必须使用 NPM 官方包</b>：在项目中通过 <code>npm i @gitlite/sdk</code> 引入，<b>严禁</b>让终端用户在本地打压缩包或使用相对路径源码。</li>
-<li><b>永远不要</b>让终端用户去申请 PAT 写进代码——那是 CI 场景才用的（<code>token</code> 参数）。产品初始化走 <code>initDB()</code> 全自动链路。</li>
+<li><b>🚨 强烈不推荐使用 PAT（严禁在用户产品中使用）</b>：对终端用户极不友好。<b>永远不要</b>让终端用户去申请 PAT 或在业务代码中硬编码 PAT——那是无人工界面的 CI 自动化测试场景才用的（<code>token</code> 参数）。业务产品初始化必须一律走 <code>initDB()</code> 全自动 OAuth / Device Flow 链路。</li>
 <li><b>不要</b>自己实现同步调度或缓存——引擎已内置（economy 默认档 + 启动/退出强制同步）。</li>
 <li><b>Schema 扩展</b>：唯一/索引/加密等专有属性统一放在 <code>x-gitlite-unique</code>, <code>x-gitlite-indexed</code> 等 <code>x-gitlite-*</code> 命名空间。</li>
-<li><b>错误处理按错误码</b>：<code>VALIDATION / UNIQUE_CONSTRAINT / CONFLICT / RATE_LIMIT / AUTH / FORMAT_VERSION / FOREIGN_REPO</code>，均为 <code>GitLiteError</code> 子类。</li>
+<li><b>错误处理按错误码</b>：<code>VALIDATION / UNIQUE_CONSTRAINT / CONFLICT / RATE_LIMIT / AUTH / FORMAT_VERSION / FOREIGN_REPO / OAUTH_APP_NOT_CONFIGURED</code>，均为 <code>GitLiteError</code> 子类。</li>
 </ol>
 </section>
+
 
 <!-- ============ FAQ ============ -->
 <section id="faq">

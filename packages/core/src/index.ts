@@ -9,8 +9,8 @@ export { SchemaValidator } from './schema/validate.js';
 export { parseJsonc, stripJsonComments } from './schema/jsonc.js';
 export { MemoryProvider } from './provider/memory.js';
 export type { GitProvider } from './provider/memory.js';
-export { GitHubProvider } from './provider/github.js';
-export { GiteeProvider } from './provider/gitee.js';
+export { GitHubProvider, type GitHubProviderOptions } from './provider/github.js';
+export { GiteeProvider, type GiteeProviderOptions } from './provider/gitee.js';
 export { deviceFlowLogin, GITLITE_GITHUB_CLIENT_ID } from './auth/device.js';
 export type { DeviceFlowCallbacks } from './auth/device.js';
 export {

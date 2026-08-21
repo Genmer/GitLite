@@ -235,7 +235,11 @@ async function main(): Promise<void> {
     font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  main { max-width: 680px; margin: 0 auto; padding: 40px 20px 80px; }
+  main {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 40px 20px calc(80px + env(safe-area-inset-bottom, 0px));
+  }
 
   /* 品牌头部 */
   .page-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
@@ -253,31 +257,34 @@ async function main(): Promise<void> {
   .gl-card {
     background: var(--card); border: 1px solid var(--border); border-radius: 16px;
     padding: 26px 26px 22px; box-shadow: var(--shadow); margin-bottom: 18px;
+    transition: all 0.2s ease;
   }
-  .gl-title { margin: 0 0 6px; font-size: 17px; }
-  .gl-sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; }
+  .gl-title { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+  .gl-sub { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
   .gl-center { text-align: center; padding: 44px 20px; color: var(--muted); }
   .gl-done { color: var(--ok); font-size: 18px; font-weight: 700; }
 
   /* 平台行 */
   .gl-platform { border: 1px solid var(--border-soft); border-radius: 14px; padding: 16px 18px; margin-bottom: 12px; }
   .gl-platform-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
-  .gl-platform-name { font-size: 15.5px; }
+  .gl-platform-name { font-size: 15.5px; font-weight: 700; }
   .gl-pills { display: inline-flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
   .gl-mark { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
     border-radius: 10px; background: var(--mono-bg); color: var(--text); flex: none; }
   .gl-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 11px;
     border-radius: 999px; white-space: nowrap; }
-  .gl-pill-ok { background: var(--ok-weak); color: var(--ok); }
+  .gl-pill-ok { background: var(--ok-weak); color: var(--ok); font-weight: 600; }
   .gl-pill-no { background: var(--mono-bg); color: var(--muted); }
 
   /* 按钮 */
   .gl-btn {
-    cursor: pointer; font: inherit; font-size: 13.5px; line-height: 1;
-    padding: 10px 18px; border-radius: 10px; border: 1px solid transparent;
+    cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 600; line-height: 1;
+    padding: 11px 18px; border-radius: 10px; border: 1px solid transparent;
     transition: background .15s, border-color .15s, transform .05s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
-  .gl-btn:active { transform: translateY(1px); }
+  .gl-btn:active { transform: scale(0.98); }
   .gl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .gl-btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 12px var(--accent-ring); }
   .gl-btn-primary:hover { background: var(--accent-2); }
@@ -285,19 +292,20 @@ async function main(): Promise<void> {
   .gl-btn-secondary:hover { background: var(--accent-weak); }
   .gl-btn-ghost { background: transparent; color: var(--muted); }
   .gl-btn-ghost:hover { color: var(--text); background: var(--mono-bg); }
-  .gl-btn-mini { padding: 5px 12px; font-size: 12.5px; border-radius: 8px;
+  .gl-btn-mini { padding: 6px 12px; font-size: 12.5px; border-radius: 8px;
     background: var(--accent-weak); color: var(--accent); }
   .gl-btn-mini:hover { background: var(--accent); color: #fff; }
   .gl-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
-  .gl-foot { margin-top: 6px; text-align: center; }
+  .gl-foot { margin-top: 8px; text-align: center; }
 
   /* 平台大选项 */
   .gl-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .gl-choice {
     cursor: pointer; font: inherit; font-size: 15px; font-weight: 600;
     display: flex; align-items: center; justify-content: center; gap: 10px;
-    padding: 22px 12px; border-radius: 14px; border: 1px solid var(--border);
+    padding: 20px 12px; border-radius: 14px; border: 1px solid var(--border);
     background: var(--card); color: var(--text);
+    transition: all 0.15s ease;
   }
   .gl-choice:hover { border-color: var(--accent); background: var(--accent-weak); }
 
@@ -315,18 +323,19 @@ async function main(): Promise<void> {
   }
   .gl-callback {
     display: flex; align-items: center; gap: 10px; margin-top: 8px;
-    background: var(--mono-bg); border: 1px dashed var(--accent); border-radius: 10px; padding: 9px 12px;
+    background: var(--mono-bg); border: 1px dashed var(--accent); border-radius: 10px; padding: 10px 12px;
   }
-  .gl-callback code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .gl-callback code { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; word-break: break-all; }
   .gl-link { color: var(--accent); word-break: break-all; text-decoration-color: var(--accent-ring); text-underline-offset: 3px; }
   .gl-link:hover { text-decoration: none; background: var(--accent-weak); }
 
   /* 表单 */
-  .gl-form { display: grid; gap: 4px; }
+  .gl-form { display: grid; gap: 6px; }
   .gl-field { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
   .gl-input {
-    font: inherit; font-size: 14px; padding: 10px 13px; width: 100%;
+    font: inherit; font-size: 14px; padding: 11px 14px; width: 100%;
     border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text);
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
   .gl-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
   .gl-input::placeholder { color: var(--muted); opacity: .6; }
@@ -334,12 +343,12 @@ async function main(): Promise<void> {
   /* 提示 / 错误 / 进度 */
   .gl-hintbox {
     background: var(--accent-weak); border-radius: 10px; padding: 12px 14px;
-    font-family: ui-monospace, Consolas, monospace; font-size: 13px; word-break: break-all; margin: 0 0 4px;
+    font-family: ui-monospace, SFMono-Regular, monospace; font-size: 13px; word-break: break-all; margin: 0 0 8px;
   }
   .gl-auth-open { display: inline-block; margin-top: 12px; text-decoration: none; }
   .gl-wait { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
   .gl-error { border-color: var(--bad); }
-  .gl-errmsg { color: var(--bad); font-size: 14px; margin: 0 0 4px; white-space: pre-line; }
+  .gl-errmsg { color: var(--bad); font-size: 14px; margin: 0 0 8px; white-space: pre-line; }
   .gl-progress { color: var(--muted); margin: 10px 0 0; font-size: 13.5px; }
   .gl-spinner {
     width: 18px; height: 18px; border-radius: 50%; display: inline-block; vertical-align: -4px; margin-right: 8px;
@@ -347,6 +356,112 @@ async function main(): Promise<void> {
     animation: gl-spin .8s linear infinite;
   }
   @keyframes gl-spin { to { transform: rotate(360deg); } }
+
+  /* 📱 深度移动端触摸与视口深度适配（不是简单拉伸） */
+  @media (max-width: 640px) {
+    main {
+      padding: 16px 12px calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    .page-header {
+      gap: 10px !important;
+      margin-bottom: 16px !important;
+    }
+    .page-logo {
+      width: 38px !important;
+      height: 38px !important;
+      font-size: 17px !important;
+      border-radius: 10px !important;
+    }
+    .page-title {
+      font-size: 19px !important;
+    }
+    .page-tag {
+      font-size: 12px !important;
+    }
+    .gl-card {
+      padding: 18px 16px 16px !important;
+      border-radius: 16px !important;
+      margin-bottom: 12px !important;
+    }
+    .gl-title { font-size: 16px !important; }
+    .gl-sub { font-size: 13px !important; margin-bottom: 14px !important; }
+    .gl-platform { padding: 14px 12px !important; border-radius: 12px !important; }
+    .gl-platform-head { gap: 8px !important; }
+    .gl-pills {
+      width: 100% !important;
+      margin-left: 0 !important;
+      margin-top: 4px !important;
+      justify-content: flex-start !important;
+    }
+    .gl-choices { grid-template-columns: 1fr !important; gap: 10px !important; }
+    .gl-choice {
+      padding: 16px 12px !important;
+      min-height: 48px !important;
+      font-size: 14px !important;
+    }
+    .gl-actions {
+      flex-direction: column !important;
+      gap: 8px !important;
+      margin-top: 14px !important;
+    }
+    .gl-actions .gl-btn {
+      width: 100% !important;
+      min-height: 44px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      text-align: center !important;
+      font-size: 14px !important;
+      padding: 12px 14px !important;
+    }
+    .gl-btn {
+      min-height: 44px !important;
+      font-size: 14px !important;
+      padding: 12px 16px !important;
+    }
+    /* 解决 iOS Safari 输入框聚焦时强制缩放页面的顽疾（font-size >= 16px） */
+    .gl-input {
+      font-size: 16px !important;
+      padding: 12px 14px !important;
+      min-height: 44px !important;
+    }
+    .gl-callback {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 8px !important;
+    }
+    .gl-callback code {
+      font-size: 12px !important;
+      word-break: break-all !important;
+    }
+    .gl-callback .gl-btn-mini {
+      width: 100% !important;
+      min-height: 38px !important;
+      padding: 8px 12px !important;
+      text-align: center !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+    }
+    .gl-steps li {
+      padding: 0 0 16px 32px !important;
+      font-size: 13px !important;
+    }
+    .gl-steps li::before {
+      width: 20px !important;
+      height: 20px !important;
+      font-size: 11px !important;
+    }
+    .gl-steps li:not(:last-child)::after {
+      left: 10px !important;
+      top: 24px !important;
+    }
+    .gl-hintbox {
+      font-size: 12px !important;
+      padding: 10px 12px !important;
+    }
+  }
+
 </style>
 <script>
   window.addEventListener('error', function (e) {

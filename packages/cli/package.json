@@ -1,17 +1,24 @@
 {
   "name": "@gitlite/cli",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "GitLite CLI",
   "type": "module",
-  "bin": { "gitlite": "./dist/bin.js" },
+  "bin": {
+    "gitlite": "./dist/bin.js"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p tsconfig.build.json", "test": "vitest run --passWithNoTests" },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests"
+  },
   "dependencies": {
-    "@gitlite/adapters-node": "0.1.0",
-    "@gitlite/codegen": "0.1.0",
-    "@gitlite/core": "0.1.0",
-    "@gitlite/sdk": "0.1.0"
+    "@gitlite/adapters-node": "0.3.0",
+    "@gitlite/codegen": "0.3.0",
+    "@gitlite/core": "0.3.0",
+    "@gitlite/sdk": "0.3.0"
   }
 }

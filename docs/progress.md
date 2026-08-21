@@ -61,12 +61,13 @@ P0 需求 ──► P1 架构设计 ──► P2 需求-架构复核 ──► P
 
 ## 五、实现质量门禁（实测，随里程碑滚动更新）
 
-| 指标 | 要求 | 实测（2026-08-16 全量收官后） |
+| 指标 | 要求 | 实测（2026-08-21 v0.3.0 状态机/浏览器运行时/胶囊组件落地） |
 |---|---|---|
-| 测试 | 全绿 | ✅ 31 文件 / 188 用例（v0.1 时 65；包数量 4→7） |
-| 覆盖率（core） | lines ≥80% | ✅ 91.48%（branches 83.61% / functions 90.05%） |
+| 测试 | 全绿 | ✅ 39 文件 / 230 用例（覆盖率门禁全过） |
+| 覆盖率（core） | lines ≥80% | ✅ 91.18%（branches 84.88% / functions 89.82%） |
 | 类型检查 | **7 包** tsc strict | ✅ 0 错误（core/adapters-node/codegen/react/ui/sdk/cli） |
 | 黄金快照 | 逐字节复现 | ✅ **v1.0.0 冻结基线** `golden-v1.0.json`（ADR-002 冻结执行） |
+
 
 ## 六、遗留项（诚实清单，v0.1 收尾前处理）
 
@@ -118,4 +119,18 @@ P0 需求 ──► P1 架构设计 ──► P2 需求-架构复核 ──► P
 | 2026-08-16 | **引导页登录网络问题检测 + Hint**（github.com 被墙时给可执行提示） | ① ui GitLiteSetup：刷新时除 detect 外，逐平台用 getStoredToken+identity 校验已登录 token 是否有效（失效→徽标降级）。② setup-page server：`isNetworkError`/`probeReachable`/`describeLoginError`——GitHub 登录遇网络错误时探测 github.com，不可达则提示「开启系统代理/VPN；仍不行切 TUN 模式」。③ core device.ts：Device Flow 双请求加 15s 超时（`request` 封装，超时抛普通 Error 避免误导性 "aborted"），墙/网络不通时尽快失败而非卡死。真机验证：github.com 瞬时被墙场景下 Device Flow 快速失败并走提示分支；网络恢复后返回 `device code request failed: Not Found`（占位 client_id 未登记 OAuth App 所致，非网络问题）。device.test.ts 2/2 绿 + core build 0 错 |
 | 2026-08-16 | **引导页 OAuth 未登记/配置写失败的可执行提示 + 数据根可重定向** | ① setup-page server `describeLoginError` 增分支：GitHub device `Not Found`（占位/无效 client_id）→ 页面显示逐步登记指引（含注册链接/回调/Enable Device Flow/粘贴 Client ID）；`.gl-errmsg` 加 `white-space:pre-line` 让多行提示正常显示。② ui「已登录」分支补「登记 OAuth 应用」按钮（失效 token 也能进登记表单）。③ **数据根整体重定向**：adapters-node `expand()`/credentials `expandDir()` 读 `GITLITE_HOME`（默认 `~`）；setup 服务启动时探测 `~/.gitlite` 是否可写，不可写（沙箱/受限令牌，本 sandbox 后台服务写用户主目录 EPERM）则自动回退 `$(tmpdir)/gitlite-home`——配置/凭据/缓存全走页面正常落盘。真机验证：保存 OAuth、登录存 token、连接全链路经页面成功。④ page.tsx 成功页加「回到主页」按钮。回归 adapters-node 12/12 绿 + app-config 3/3 绿 + setup 9/9 绿 |
 | 2026-08-17 | **NPM 发布与自动化版本管理落地**（`scripts/release.mjs` + `docs/15-npm-publish.md`） | ① 新增 `scripts/release.mjs`：`release:check`（7 包版本及跨包依赖一致性检测）、`version:bump <ver>`（一键递归同步升级 7 包 `package.json` 版本与内部依赖，杜绝遗漏）、`release:publish [--dry-run]`（按拓扑顺序 `core`→`adapters-node`→`codegen`→`sdk`→`react`→`ui`→`cli` 依次编译与 `--access public` 发布）；② 根 `package.json` 挂载 `npm run version:bump` / `npm run release:check` / `npm run release:publish` / `npm run release:dry-run`；③ 新增 `docs/15-npm-publish.md`（完整 npm 账号/组织创建/发布拓扑/Tag 指南）并更新 `AGENTS.md` / `README.md` / `docs/llms.txt`。release check 验证通过 |
+| 2026-08-19 | **v0.2.0 发布：缺陷修复与 SDK 统一门面导出增强** | ① **Issue 1 占位符拦截**：新增 `OAuthAppNotConfiguredError` 并在 `deviceFlowLogin`、`giteeAuthorizeUrl`、`exchangeGiteeCode`、`interactiveLogin`、`giteeLogin` 前置拦截未配置/占位符 client_id，防止云端裸 HTTP 报错；② **Issue 2 initDB 跨 Provider 校验与 Memory 隔离**：`MemoryProvider` 初始化后不落盘 `bindings.json`，`initDB` 幂等重连严格校验请求 provider 与缓存记录是否一致，不一致时强制重新初始化并覆盖旧 bindings，并补充 Gitee 自动 OAuth 交互登录；③ **Issue 3 SDK 完整导出**：`@gitlite/sdk` 统一 re-export Node 适配器函数/常量（`createNodeRuntime`、`createNodeSqlite`、`waitForRedirect` 等）与错误类型，业务层无需单独装包；④ 7 包同步升级 `v0.2.0`（`release:bump` / `release:check` / `release:dry-run` 预检全绿）。测试增至 35 文件 213 用例全绿，覆盖率 lines 91.17% |
+| 2026-08-20 | **全文档强化 Personal Access Token (PAT) 禁用告警** | 在 `docs/llms.txt`、`README.md`、`docs/guide.md`、`docs/index.html`、`docs/04-auth.md`、`docs/09-sdk-cli.md` 等全量文档中明确声明：**强烈不推荐在面向用户的产品中使用 PAT（对终端用户极不友好且易泄露权限）**，严格约束 Agent 与开发者产品代码必须使用 `initDB()` 自动 OAuth / Device Flow 流程，`token` (PAT) 仅限无人工交互的 CI/CD 自动化测试 |
+| 2026-08-20 | **生态统一授权应用规范与登记教程落地**（统一应用命名 `GitLite 应用授权` / 统一仓库 `gitlite-repo`） | ① 确立全生态规范：推荐授权应用统一命名为 `GitLite 应用授权`（或 `GitLite`），主页 `http://127.0.0.1:18365`，回调 `http://127.0.0.1:18365/callback`，仓库 `gitlite-repo`（各库走 `gitlite/<database>` 分支隔离），便于用户在授权列表中一目了然统一识别；② 保护私有密钥安全，引擎与 SDK 保持占位拦截与凭据隔离，通过 `npx gitlite setup` 登记一次全机所有 GitLite App 自动通用；③ 更新教程 `docs/guide.md`（§5.3 规范表与登记指南）、`README.md`、`docs/04-auth.md`。门禁 35 文件 213 用例全绿 + 7 包 build / typecheck 0 错误 |
+| 2026-08-21 | **吸收真实落地案例 Memex 实践经验：扩充桌面端/Vue 3/Tauri 实战教程** | ① 研读 Memex（大模型记忆与技能中枢）桌面端完整落地架构，提取四大黄金工程范式：跨环境 SmartFetch（委托 Rust Reqwest 代理彻底消除桌面端 CORS/CSP 限制）、OAuth 授权多通道闭环（TCP Loopback 监听 + 网页复制 + 剪贴板识别 + 客户端深链）、UI 状态胶囊模式（Capsule Pattern 与实时呼吸灯）、主动双向即时同步（`sync.pull()` + `sync.flush()`）；② 在 `docs/guide.md` 新增「形态 4：桌面端与 Vue 3 / Tauri 实战架构」，并在 `README.md` 实战生态中引入 Memex 开源项目案例。验证测试全绿 |
+| 2026-08-21 | **UI 深度移动端触摸与视口深度适配（@gitlite/ui + setup-page）** | ① `@gitlite/ui` 与 `examples/setup-page` 落地生产级全响应式移动端样式（`GITLITE_UI_CSS` + `GitLiteStyleInjector`）；② **移动端人体工学优化**：44px 最小触摸舒适点击区（`touch-action: manipulation`）、操作按钮全宽垂直堆叠（拇指操作极佳）、平台状态徽标自适应折行、步骤与回调复制框单列伸缩；③ **iOS Safari 体验细节**：输入框字体锁死 `16px`（彻底根除聚焦时 Safari 强制自动放大页面的顽疾）、底部安全区自适应（`env(safe-area-inset-bottom)`）。门禁 35 文件 216 测试全绿 |
+| 2026-08-21 | **发布《GitLite PWA 移动端安装与多端实战指南》（docs/pwa.md）** | ① 详尽阐释 iOS 系统沙箱限制（为什么不能双击本地 HTML 文件、必须走 HTTP/HTTPS 协议）与两大极速安装路径（本地 Wi-Fi 局域网 2 分钟极速直连、免费云端一键发布）；② 给出 Memex / Vue 3 / React 项目改造清单（`index.html` 视口配置、`manifest.webmanifest`、`safe-area-inset` 底部横条适配）；③ 规范 GitLite 在 iPhone PWA 上的 Local-First 毫秒级写入与定时/主动 Push 到 Gitee/GitHub，实现与 Mac 客户端双向实时漫游；④ 在 `README.md` 与 `docs/guide.md` 建立全链路索引与导航 |
+| 2026-08-21 | **v0.3.0 发布：生产落地体验全面升级与浏览器运行时生态** | ① **统一连接与同步状态机**：`SyncState` 6 态流转（`connecting`→`ready`→`syncing`→`synced`→`offline`→`error`）+ `status:change` 事件广播 + `client.syncNow()` 主动双向增量同步 + `autoPullOnInit` 自动对齐远端；② **大容量浏览器运行时**：`IndexedDbFsAdapter` + `IndexedDbCredentialStore` + `createBrowserRuntime()`（原生 `IndexedDB` 突破 5MB 配额）；③ **Provider 跨域代理支持**：`GitHubProvider` / `GiteeProvider` 支持 `baseUrl` 代理（如 Cloudflare Worker / Vite Proxy），彻底解决 Web 端 CORS 痛点；④ **前端生态组件**：`@gitlite/ui` 新增 `<GitLiteCapsule />` 状态胶囊组件（呼吸灯/分支/一键立即同步/移动端适配）+ `@gitlite/react` 新增 `useSyncStatus` Hook；⑤ 7 包同步升级 `v0.3.0`。测试增至 39 文件 230 用例全绿，覆盖率 91.18%，7 包 build / typecheck 0 错 |
+
+
+
+
+
+
+
 

@@ -7,11 +7,13 @@ import * as os from 'node:os';
 import { createRequire } from 'node:module';
 import type { RuntimeAdapter, SqliteAdapterFactory, SqliteDb } from '@gitlite/core';
 import { createOsCredentialStore, FileCredentialStore } from './credentials.js';
-import { waitForRedirect, GITLITE_LOOPBACK_PORT } from './loopback.js';
+import { waitForRedirect, GITLITE_LOOPBACK_PORT, renderOAuthSuccessHtml } from './loopback.js';
+
 
 export { createOsCredentialStore, FileCredentialStore };
 export type { Runner, ExecResult } from './credentials.js';
-export { waitForRedirect, GITLITE_LOOPBACK_PORT };
+export { waitForRedirect, GITLITE_LOOPBACK_PORT, renderOAuthSuccessHtml };
+
 
 function expand(p: string): string {
   // GITLITE_HOME 可整体重定向数据根目录（默认 ~ 即用户主目录）；服务/沙箱写不了用户主目录时用它

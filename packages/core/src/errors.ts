@@ -98,3 +98,14 @@ export class ForeignRepoError extends GitLiteError {
     this.files = files;
   }
 }
+
+export class OAuthAppNotConfiguredError extends GitLiteError {
+  provider: 'github' | 'gitee';
+  constructor(provider: 'github' | 'gitee', message?: string) {
+    super('OAUTH_APP_NOT_CONFIGURED',
+      message ?? `OAuth App for "${provider}" is not configured (client_id is placeholder). Run \`gitlite setup\`, save ~/.gitlite/app-config.json, or configure GITLITE_${provider.toUpperCase()}_CLIENT_ID.`);
+    this.name = 'OAuthAppNotConfiguredError';
+    this.provider = provider;
+  }
+}
+

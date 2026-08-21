@@ -1,6 +1,6 @@
 {
   "name": "@gitlite/react",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "GitLite react — React hooks（useGitLite/useFind/useDoc/useUpdate）",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,11 +11,18 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p tsconfig.build.json", "test": "vitest run --passWithNoTests" },
-  "peerDependencies": { "react": ">=18" },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
   "dependencies": {
-    "@gitlite/core": "0.1.0",
-    "@gitlite/sdk": "0.1.0"
+    "@gitlite/core": "0.3.0",
+    "@gitlite/sdk": "0.3.0"
   }
 }

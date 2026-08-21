@@ -12,17 +12,29 @@ import type {
 import type { ChangedFiles, GitProvider } from './memory.js';
 import { rateLimitBackoffMs } from './rate-limit.js';
 
-const API = 'https://gitee.com/api/v5';
+const DEFAULT_API = 'https://gitee.com/api/v5';
+
+export interface GiteeProviderOptions {
+  /** 自定义 API 基地址（用于代理转发 / Cloudflare Worker / 测试 Mock） */
+  baseUrl?: string;
+}
 
 export class GiteeProvider implements GitProvider {
   readonly id = 'gitee';
+  private api: string;
 
-  constructor(private token: string, private doFetch: typeof fetch = fetch) {}
+  constructor(
+    private token: string,
+    private doFetch: typeof fetch = fetch,
+    opts?: GiteeProviderOptions
+  ) {
+    this.api = opts?.baseUrl ? opts.baseUrl.replace(/\/+$/, '') : DEFAULT_API;
+  }
 
   private async req<T>(method: string, path: string, body?: any): Promise<{ status: number; data: T | null }> {
     let res: Response;
     try {
-      res = await this.doFetch(`${API}${path}`, {
+      res = await this.doFetch(`${this.api}${path}`, {
         method,
         headers: {
           Authorization: `Bearer ${this.token}`,

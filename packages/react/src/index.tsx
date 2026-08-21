@@ -156,3 +156,55 @@ export function useUpdate<T = any>(
   void bump;
   return [updateOne, pending];
 }
+
+export interface SyncStatusState {
+  state: 'connecting' | 'ready' | 'syncing' | 'synced' | 'offline' | 'error';
+  status: any;
+  syncing: boolean;
+  lastSyncAt: string | null;
+  syncNow: () => Promise<{ pushed: boolean; pulled: boolean }>;
+}
+
+/** 实时同步与连接状态 hook：自动响应 status:change、sync:push、sync:pull 驱动 UI 胶囊/指示灯 */
+export function useSyncStatus(db: GitLiteClient | null): SyncStatusState {
+  const [syncState, setSyncState] = useState<'connecting' | 'ready' | 'syncing' | 'synced' | 'offline' | 'error'>(
+    db ? (db as any).state ?? 'ready' : 'connecting'
+  );
+  const [status, setStatus] = useState<any>(db ? db.syncStatus() : null);
+
+  useEffect(() => {
+    if (!db) {
+      setSyncState('connecting');
+      setStatus(null);
+      return;
+    }
+    setSyncState((db as any).state ?? 'ready');
+    setStatus(db.syncStatus());
+
+    const off1 = db.on('status:change', (e: { state: any }) => {
+      setSyncState(e.state);
+      setStatus(db.syncStatus());
+    });
+    const off2 = db.on('sync:push', () => setStatus(db.syncStatus()));
+    const off3 = db.on('sync:pull', () => setStatus(db.syncStatus()));
+    return () => { off1(); off2(); off3(); };
+  }, [db]);
+
+  const syncNow = useCallback(async (): Promise<{ pushed: boolean; pulled: boolean }> => {
+    if (!db) return { pushed: false, pulled: false };
+    if (typeof (db as any).syncNow === 'function') {
+      return await (db as any).syncNow();
+    }
+    await (db as any).sync.pull();
+    await (db as any).sync.flush();
+    return { pushed: true, pulled: true };
+  }, [db]);
+
+  return {
+    state: syncState,
+    status,
+    syncing: syncState === 'syncing',
+    lastSyncAt: status?.lastSyncAt ?? null,
+    syncNow
+  };
+}

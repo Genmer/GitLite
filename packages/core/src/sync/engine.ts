@@ -8,7 +8,7 @@ import { parseJsonc } from '../schema/jsonc.js';
 import { parseDocs, StorageEngine, dataFileOwner } from '../storage/engine.js';
 import type { IndexManager } from '../index/manager.js';
 import type { QuotaTracker } from '../quota/tracker.js';
-import { SYS, type RepoRef, type SyncPolicy, type SyncStatus, type Document } from '../types.js';
+import { SYS, type RepoRef, type SyncPolicy, type SyncStatus, type Document, type SyncState } from '../types.js';
 import type { FileChange } from '../types.js';
 import type { CommitQueue } from './queue.js';
 import { FieldCipher, encryptDoc, decryptDoc } from '../crypto/cipher.js';
@@ -25,7 +25,18 @@ export class SyncEngine {
   private flushing = false;
   private lastSyncAt: string | null = null;
   private mode: 'normal' | 'fully-local' = 'normal';
+  private state: SyncState = 'connecting';
   private conflictCount = 0;
+
+  /** 获取当前连接/同步状态机状态 */
+  getState(): SyncState {
+    return this.state;
+  }
+
+  private setState(state: SyncState, detail?: any): void {
+    this.state = state;
+    this.bus.emit('status:change', { state, detail });
+  }
 
   /** 设置字段加密 passphrase（ADR-003）；null/空 = 关闭加密（兼容无加密库） */
   setPassphrase(p: string | null | undefined): void {
@@ -49,28 +60,35 @@ export class SyncEngine {
 
   /** 首次/重启：重放遗留队列 → pull → flush（FR F3 强制） */
   async startup(files: Map<string, string> | null): Promise<void> {
-    if (files) {
-      files = await this.decryptFiles(files);   // ADR-003：远端密文 → 明文镜像
-      this.storage.importFiles(files);
-      this.indexMgr.importFiles(files);
-      // 初始树（path→content）：P1c 增量 pull 的比对基准；首次 flush 后 commit 返回真实树
-      this.remoteTree = new Map(files);
-      const cfg = files.get(SYS.configPath);
-      if (cfg) {
-        const { formatVersion } = JSON.parse(cfg);
-        checkFormatVersion(formatVersion, this.bus);
+    this.setState('connecting');
+    try {
+      if (files) {
+        files = await this.decryptFiles(files);   // ADR-003：远端密文 → 明文镜像
+        this.storage.importFiles(files);
+        this.indexMgr.importFiles(files);
+        // 初始树（path→content）：P1c 增量 pull 的比对基准；首次 flush 后 commit 返回真实树
+        this.remoteTree = new Map(files);
+        const cfg = files.get(SYS.configPath);
+        if (cfg) {
+          const { formatVersion } = JSON.parse(cfg);
+          checkFormatVersion(formatVersion, this.bus);
+        }
+        const docs = parseDocs(files);
+        for (const [c, m] of docs) this.indexMgr.rebuild(c, [...m.values()]);
       }
-      const docs = parseDocs(files);
-      for (const [c, m] of docs) this.indexMgr.rebuild(c, [...m.values()]);
-    }
-    this.headOid = await this.track(() => this.provider.getHead(this.ref, this.branch));
+      this.headOid = await this.track(() => this.provider.getHead(this.ref, this.branch));
 
-    // 重放本地遗留队列（进程崩溃场景，NFR-4）
-    const pending = await this.queue.load();
-    if (pending.length && files) {
-      this.replay(pending);
+      // 重放本地遗留队列（进程崩溃场景，NFR-4）
+      const pending = await this.queue.load();
+      if (pending.length && files) {
+        this.replay(pending);
+      }
+      await this.flush(); // 启动强制同步（含 bootstrap 空 commit）
+      this.setState('ready');
+    } catch (e) {
+      this.setState(isNetwork(e) ? 'offline' : 'error', { error: e });
+      throw e;
     }
-    await this.flush(); // 启动强制同步（含 bootstrap 空 commit）
   }
 
   // ---------- 写调度（economy）----------
@@ -94,6 +112,7 @@ export class SyncEngine {
   async flush(): Promise<void> {
     if (this.flushing) return;
     this.flushing = true;
+    this.setState('syncing', { action: 'push' });
     try {
       for (let attempt = 0; attempt <= this.policy.maxRetries; attempt++) {
         const committed = new Set(this.storage.dirtyCollections()); // diff 的脏集快照（同步相邻，无竞态）
@@ -101,10 +120,12 @@ export class SyncEngine {
         if (plain.length === 0) {
           this.storage.clearDirty(); // 有脏但内容与基线一致 → 清脏，避免悬挂
           await this.queue.clear();
+          this.setState(this.mode === 'fully-local' ? 'offline' : 'synced', { action: 'push', pushed: 0 });
           return;
         }
         if (!this.quota.canSpend(COMMIT_CALL_COST)) {
           this.bus.emit('quota:warning', this.quota.status());
+          this.setState('error', { error: 'quota_exceeded' });
           throw new QuotaExceededError(60_000); // 保留队列，等下个窗口
         }
         try {
@@ -117,6 +138,7 @@ export class SyncEngine {
           await this.queue.clear();
           this.lastSyncAt = new Date(this.runtime.now()).toISOString();
           this.bus.emit('sync:push', { oid, changes: changes.length });
+          this.setState('synced', { action: 'push', oid, changes: changes.length });
           return;
         } catch (e) {
           if (e instanceof ConflictError && attempt < this.policy.maxRetries) {
@@ -128,6 +150,9 @@ export class SyncEngine {
           throw e;
         }
       }
+    } catch (e) {
+      this.setState(isNetwork(e) ? 'offline' : 'error', { error: e });
+      throw e;
     } finally {
       this.flushing = false;
     }
@@ -136,79 +161,98 @@ export class SyncEngine {
   // ---------- pull（合并远端变更）----------
 
   async pull(): Promise<void> {
-    const head = await this.track(() => this.provider.getHead(this.ref, this.branch));
-    if (head === null) return; // 分支不存在（连接流程已保证存在，防御）
-    if (head === this.headOid) return;
-
-    // 远端全量（重构：有增量能力且已有树 → 基线 + 增量；否则全量拉取）
-    let remoteFiles: Map<string, string> | null;
-    if (this.provider.getChangedFiles) {
-      const res = await this.track(() =>
-        this.provider.getChangedFiles!(this.ref, this.branch, this.remoteTree));
-      if (!res) return;
-      remoteFiles = this.remoteTree === null
-        ? new Map(res.files)                                // 会话首拉：返回即全量
-        : applyRemoteDelta(this.storage.getBaseline(), res); // 基线 + 远端增量 = 远端全量
-      this.remoteTree = res.tree;
-    } else {
-      remoteFiles = await this.track(() => this.provider.getFiles(this.ref, this.branch));
-      if (!remoteFiles) return;
-    }
-    remoteFiles = await this.decryptFiles(remoteFiles); // ADR-003：远端密文 → 明文镜像/基线
-
-    // 本地待提交快照（dirty 集）
-    const pending = this.queue.snapshot();
-    const dirtyUpserts = new Map<string, any>();
-    const dirtyDeletes = new Set<string>();
-    for (const op of pending) {
-      const key = op.kind === 'upsert' ? `${op.collection}::${op.doc._id}` : `${op.collection}::${op.id}`;
-      if (op.kind === 'upsert') dirtyUpserts.set(key, op.doc);
-      else dirtyDeletes.add(key);
-    }
-
-    const remoteDocs = parseDocs(remoteFiles);
-    const conflicts: any[] = [];
-
-    // 以远端为底座重建镜像
-    this.storage.importFiles(remoteFiles);
-
-    // 重放本地 pending（与远端同 id 修改 → 本地胜出 + 记冲突，v0.1 简化合并，见 11 §6）
-    for (const [key, doc] of dirtyUpserts) {
-      const c = key.split('::')[0]!;
-      const remoteDoc = remoteDocs.get(c)?.get(doc._id);
-      if (remoteDoc && remoteDoc._rev !== doc._rev) {
-        conflicts.push({ collection: c, id: doc._id, strategy: 'local-wins' });
+    this.setState('syncing', { action: 'pull' });
+    try {
+      const head = await this.track(() => this.provider.getHead(this.ref, this.branch));
+      if (head === null) {
+        this.setState(this.mode === 'fully-local' ? 'offline' : 'ready');
+        return; // 分支不存在（连接流程已保证存在，防御）
       }
-      const before = this.storage.read(c, doc._id);
-      this.storage.upsert(c, doc);
-      this.indexMgr.onWrite(c, before, doc);
-    }
-    for (const key of dirtyDeletes) {
-      const [c, id] = key.split('::');
-      const before = this.storage.read(c!, id!);
-      if (before) {
-        this.storage.delete(c!, id!);
-        this.indexMgr.onWrite(c!, before, null);
+      if (head === this.headOid) {
+        this.setState(this.mode === 'fully-local' ? 'offline' : 'synced', { action: 'pull', changed: false });
+        return;
       }
-    }
 
-    // schema / 索引随远端
-    for (const [path, content] of remoteFiles) {
-      const m = /^_schema\/(.+)\.schema\.jsonc$/.exec(path);
-      if (m) {
-        const schema = parseJsonc(content);
-        this.storage.putSchema(m[1]!, schema);
-        this.indexMgr.registerSchema(m[1]!, schema);
+      // 远端全量（重构：有增量能力且已有树 → 基线 + 增量；否则全量拉取）
+      let remoteFiles: Map<string, string> | null;
+      if (this.provider.getChangedFiles) {
+        const res = await this.track(() =>
+          this.provider.getChangedFiles!(this.ref, this.branch, this.remoteTree));
+        if (!res) {
+          this.setState(this.mode === 'fully-local' ? 'offline' : 'synced');
+          return;
+        }
+        remoteFiles = this.remoteTree === null
+          ? new Map(res.files)                                // 会话首拉：返回即全量
+          : applyRemoteDelta(this.storage.getBaseline(), res); // 基线 + 远端增量 = 远端全量
+        this.remoteTree = res.tree;
+      } else {
+        remoteFiles = await this.track(() => this.provider.getFiles(this.ref, this.branch));
+        if (!remoteFiles) {
+          this.setState(this.mode === 'fully-local' ? 'offline' : 'synced');
+          return;
+        }
       }
-    }
-    for (const [c, m] of remoteDocs) this.indexMgr.rebuild(c, [...m.values()]);
+      remoteFiles = await this.decryptFiles(remoteFiles); // ADR-003：远端密文 → 明文镜像/基线
 
-    this.storage.setBaseline(remoteFiles);
-    this.headOid = head;
-    this.conflictCount += conflicts.length;
-    this.lastSyncAt = new Date(this.runtime.now()).toISOString();
-    this.bus.emit('sync:pull', { head, conflicts });
-    this.bus.emit('remoteChange', { head });
+      // 本地待提交快照（dirty 集）
+      const pending = this.queue.snapshot();
+      const dirtyUpserts = new Map<string, any>();
+      const dirtyDeletes = new Set<string>();
+      for (const op of pending) {
+        const key = op.kind === 'upsert' ? `${op.collection}::${op.doc._id}` : `${op.collection}::${op.id}`;
+        if (op.kind === 'upsert') dirtyUpserts.set(key, op.doc);
+        else dirtyDeletes.add(key);
+      }
+
+      const remoteDocs = parseDocs(remoteFiles);
+      const conflicts: any[] = [];
+
+      // 以远端为底座重建镜像
+      this.storage.importFiles(remoteFiles);
+
+      // 重放本地 pending（与远端同 id 修改 → 本地胜出 + 记冲突，v0.1 简化合并，见 11 §6）
+      for (const [key, doc] of dirtyUpserts) {
+        const c = key.split('::')[0]!;
+        const remoteDoc = remoteDocs.get(c)?.get(doc._id);
+        if (remoteDoc && remoteDoc._rev !== doc._rev) {
+          conflicts.push({ collection: c, id: doc._id, strategy: 'local-wins' });
+        }
+        const before = this.storage.read(c, doc._id);
+        this.storage.upsert(c, doc);
+        this.indexMgr.onWrite(c, before, doc);
+      }
+      for (const key of dirtyDeletes) {
+        const [c, id] = key.split('::');
+        const before = this.storage.read(c!, id!);
+        if (before) {
+          this.storage.delete(c!, id!);
+          this.indexMgr.onWrite(c!, before, null);
+        }
+      }
+
+      // schema / 索引随远端
+      for (const [path, content] of remoteFiles) {
+        const m = /^_schema\/(.+)\.schema\.jsonc$/.exec(path);
+        if (m) {
+          const schema = parseJsonc(content);
+          this.storage.putSchema(m[1]!, schema);
+          this.indexMgr.registerSchema(m[1]!, schema);
+        }
+      }
+      for (const [c, m] of remoteDocs) this.indexMgr.rebuild(c, [...m.values()]);
+
+      this.storage.setBaseline(remoteFiles);
+      this.headOid = head;
+      this.conflictCount += conflicts.length;
+      this.lastSyncAt = new Date(this.runtime.now()).toISOString();
+      this.bus.emit('sync:pull', { head, conflicts });
+      this.bus.emit('remoteChange', { head });
+      this.setState('synced', { action: 'pull', head, conflicts: conflicts.length });
+    } catch (e) {
+      this.setState(isNetwork(e) ? 'offline' : 'error', { error: e });
+      throw e;
+    }
   }
 
   // ---------- 生命周期 ----------
@@ -221,7 +265,8 @@ export class SyncEngine {
 
   status(): SyncStatus {
     return {
-      online: true,
+      online: this.mode !== 'fully-local',
+      state: this.state,
       mode: this.mode,
       pendingOps: this.queue.size(),
       lastSyncAt: this.lastSyncAt,

@@ -1,5 +1,5 @@
 // GitHub Device Flow（FR B1）：无 client_secret、免回调；UI 交互经回调注入（sdk/CLI 决定怎么展示）
-import { AuthError, NetworkError } from '../errors.js';
+import { AuthError, NetworkError, OAuthAppNotConfiguredError } from '../errors.js';
 
 const DEVICE_ENDPOINT = 'https://github.com/login/device/code';
 const TOKEN_ENDPOINT = 'https://github.com/login/oauth/access_token';
@@ -43,6 +43,9 @@ export async function deviceFlowLogin(
   opts?: { clientId?: string; scope?: string; sleep?: (ms: number) => Promise<void> }
 ): Promise<{ token: string }> {
   const clientId = opts?.clientId ?? resolveDeviceClientId();
+  if (!clientId || clientId === GITLITE_GITHUB_CLIENT_ID || clientId === 'gitlite-placeholder') {
+    throw new OAuthAppNotConfiguredError('github');
+  }
   const scope = opts?.scope ?? 'repo read:user';
   const sleep = opts?.sleep ?? defaultSleep;
   const res = await request(fetchFn, DEVICE_ENDPOINT, {
@@ -50,6 +53,7 @@ export async function deviceFlowLogin(
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ client_id: clientId, scope })
   }).catch(e => { throw new NetworkError(String(e)); });
+
   const code: any = await res.json();
   if (!code.device_code) throw new AuthError(`device code request failed: ${JSON.stringify(code)}`);
 

@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { useFind, useUpdate } from './index.js';
+import { useFind, useUpdate, useSyncStatus } from './index.js';
 import { connect } from '@gitlite/sdk';
 import type { GitLiteClient } from '@gitlite/sdk';
 
@@ -83,6 +83,26 @@ describe('useUpdate', () => {
     expect(ok).toBe(true);
     expect(result.current[1]).toBe(false);
     expect((await db.collection('users').findOne({ email: 'a@x.dev' } as any) as any)?.age).toBe(31);
+    await db.close();
+  });
+});
+
+describe('useSyncStatus', () => {
+  it('响应 db 同步状态与 syncNow 调用', async () => {
+    const db = await fixture();
+    const { result } = renderHook(() => useSyncStatus(db));
+
+    expect(result.current.state).toBe('ready');
+    expect(result.current.status).toBeDefined();
+    expect(result.current.syncing).toBe(false);
+
+    let syncResult: any;
+    await act(async () => {
+      syncResult = await result.current.syncNow();
+    });
+
+    expect(syncResult).toBeDefined();
+    expect(result.current.state).toBe('synced');
     await db.close();
   });
 });

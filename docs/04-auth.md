@@ -10,7 +10,7 @@
 4. **多账号隔离**：同一台机器可登录多个 GitHub/Gitee 账号，按 profile 切换。
 5. **跨环境**：CLI、SDK、桌面端、浏览器端登录流程统一抽象。
 
-## 一、OAuth App 预置策略
+## 一、OAuth App 预置与自建策略
 
 GitLite 官方预置一对 OAuth App，client_id 公开（编译进 binary / 写死在 SDK），client_secret 仅服务端组件持有。
 
@@ -20,11 +20,22 @@ GitLite 官方预置一对 OAuth App，client_id 公开（编译进 binary / 写
 | GitHub | Authorization Code + PKCE | 需 secret（仅交换 token 时） | 浏览器端 / 需重定向时用；secret 通过 GitLite 官方 broker 服务中转（可选自建） |
 | Gitee | Authorization Code + Loopback + PKCE | **必须 secret** | Gitee 无 Device Flow；强制 client_secret，需 broker 或本地内嵌 secret |
 
+### 占位符拦截与自建引导（OAuthAppNotConfiguredError）
+
+在官方托管 App 尚未就绪或开发测试期，core 与 sdk 内置的 client_id 为占位符 `'gitlite-placeholder'`。
+SDK 与核心库会在发起云端网络请求前进行前置防御性检查：
+- 若检测到 `client_id` 为占位符且本地未配置，**直接抛出结构化错误 `OAuthAppNotConfiguredError`**（`code = 'OAUTH_APP_NOT_CONFIGURED'`），而不是发起无效请求导致云端返回裸 HTTP 404 / 400 错误。
+- 用户可通过以下三种方式之一完成配置：
+  1. 运行 `gitlite setup` 进入交互式向导，自动保存至 `~/.gitlite/app-config.json`；
+  2. 配置环境变量 `GITLITE_DEVICE_CLIENT_ID`（或 `GITLITE_GITEE_CLIENT_ID` 与 `GITLITE_GITEE_CLIENT_SECRET`）；
+  3. 在 API 调用中显式传入 `clientId`。
+
 ### 关于「secret 内嵌 binary」的取舍
 
 - **风险**：反编译可提取 secret，被滥用冒充 GitLite App。
 - **缓解**：secret 仅用于换取 token，不发普通用户；Gitee 侧限制 redirect_uri 为 `http://localhost:<port>/callback`；异常流量会被 Gitee 限流封禁。
 - **更优解**：GitLite 官方提供一个轻量 broker（`auth.gitlite.dev`），SDK 走 broker 交换 token，secret 不下沉到客户端。MVP 阶段为降低运维先用内嵌，v1.0 切 broker。
+
 
 ## 二、GitHub 登录流程
 
@@ -110,9 +121,12 @@ Gitee **无 Device Flow**，且 token 交换**强制 client_secret**。采用 Au
 
 要点：
 
+- **生态统一应用命名与规范**：建议开发者/组织在 Git 平台创建应用时，统一命名为 **`GitLite 应用授权`**（或 `GitLite`），主页 `http://127.0.0.1:18365`，回调 `http://127.0.0.1:18365/callback`，便于用户在授权列表中一目了然统一识别。
 - Gitee token **有过期**（默认 7 天），必须支持 refresh。
-- `client_secret` 通过 GitLite broker 中转，或 MVP 阶段内嵌 binary（带前面提到的风险）。
+- `client_secret` 与 `client_id` 在本机一次登记（`npx gitlite setup`）保存至 `~/.gitlite/app-config.json` 后，所有 GitLite App 均自动生效。
 - Scope `projects` 含建仓/删仓；`pull_requests` 用于分支同步；`groups` 可选用于组织仓库。
+
+
 
 ### 回调地址的分形态适配（打包发行场景）
 
@@ -300,7 +314,7 @@ const client2 = await GitLite.connect({
   auth: { type: 'stored', profile: 'alice-gh' }
 });
 
-// 3. 直接用 PAT（CI / 高级用户）
+// 3. 直接用 PAT（仅限无人工交互的 CI/CD 自动化测试脚本，强烈不推荐在用户产品中使用，对终端用户不友好）
 const client3 = await GitLite.connect({
   provider: 'github',
   auth: { type: 'pat', token: process.env.GH_TOKEN }
@@ -311,6 +325,7 @@ const giteeClient = await GitLite.connect({
   provider: 'gitee',
   auth: { type: 'stored', profile: 'alice-gitee' }
 });
+
 ```
 
 ## 九、Token 失效与刷新

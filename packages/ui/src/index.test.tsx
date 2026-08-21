@@ -2,7 +2,8 @@
 // GitLiteWizard 测试：注入 stub flows 走完多步状态机（选平台→登录→配置→连接→onReady）+ 错误路径
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { GitLiteWizard, type WizardFlows } from './index.js';
+import { GitLiteWizard, GitLiteStyleInjector, GITLITE_UI_CSS, type WizardFlows } from './index.js';
+
 
 afterEach(cleanup); // vitest 未开 globals → RTL 自动清理不生效，手动清理
 
@@ -87,4 +88,20 @@ describe('GitLiteWizard（内置向导）', () => {
     await waitFor(() => expect(screen.getByTestId('wizard-error')).toBeTruthy());
     expect(flows.connect).not.toHaveBeenCalled();
   });
+
+  it('导出 GITLITE_UI_CSS 包含移动端适配规则与 iOS 防放大配置', () => {
+    expect(typeof GITLITE_UI_CSS).toBe('string');
+    expect(GITLITE_UI_CSS).toContain('@media (max-width: 640px)');
+    expect(GITLITE_UI_CSS).toContain('font-size: 16px !important');
+    expect(GITLITE_UI_CSS).toContain('min-height: 44px');
+  });
+
+  it('GitLiteStyleInjector 能够向 document.head 注入样式', () => {
+    render(<GitLiteStyleInjector />);
+    const el = document.getElementById('gitlite-ui-styles');
+    expect(el).not.toBeNull();
+    expect(el?.tagName.toLowerCase()).toBe('style');
+    expect(el?.textContent).toContain('gl-card');
+  });
 });
+

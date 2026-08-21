@@ -103,8 +103,11 @@ export const POLICIES: Record<'economy' | 'balanced' | 'realtime', SyncPolicy> =
   realtime: { timeWindowMs: 60_000, batchSize: 20, maxRetries: 3, maxRemoteCallsPerHour: 800 }
 };
 
+export type SyncState = 'connecting' | 'ready' | 'syncing' | 'synced' | 'offline' | 'error';
+
 export interface SyncStatus {
   online: boolean;
+  state: SyncState;
   mode: 'normal' | 'fully-local';
   pendingOps: number;
   lastSyncAt: string | null;

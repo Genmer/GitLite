@@ -1,11 +1,17 @@
-// @gitlite/sdk：connect（URI/对象）、initDB（headless 幂等）、databases、profiles
 import {
   Collection, ForeignRepoError, GitHubProvider, GiteeProvider, GitLiteClient, MemoryProvider,
   deviceFlowLogin, exchangeGiteeCode, giteeAuthorizeUrl, resolveGiteeClientId, resolveGiteeClientSecret,
-  GITLITE_GITEE_CLIENT_ID,
-  SYS, type GitProvider, type RepoRef, type SyncPolicy, POLICIES
+  GITLITE_GITHUB_CLIENT_ID, GITLITE_GITEE_CLIENT_ID,
+  IndexedDbFsAdapter, IndexedDbCredentialStore, createBrowserRuntime, type BrowserRuntimeOptions,
+  GitLiteError, ValidationError, UniqueConstraintError, NotFoundError, ConflictError,
+  QuotaExceededError, RateLimitError, AuthError, NetworkError, FormatVersionError, OAuthAppNotConfiguredError,
+  SYS, type GitProvider, type RepoRef, type SyncPolicy, type SyncState, POLICIES, type SqliteAdapterFactory, type SqliteDb
 } from '@gitlite/core';
-import { createNodeRuntime, createNodeSqlite, waitForRedirect } from '@gitlite/adapters-node';
+import {
+  createNodeRuntime, createNodeSqlite, waitForRedirect, GITLITE_LOOPBACK_PORT, renderOAuthSuccessHtml,
+  createOsCredentialStore, FileCredentialStore, type Runner, type ExecResult
+} from '@gitlite/adapters-node';
+
 import { getOAuthApp } from './app-config.js';
 export * from './app-config.js';
 import type { RuntimeAdapter } from '@gitlite/core';
@@ -23,6 +29,10 @@ export interface SdkConnectOptions {
   allowForeignRepo?: boolean;
   /** 索引后端（P4）：'memory'（默认）/ 'sqlite'（本地缓存 ~/.gitlite/cache/<指纹>/index.db） */
   indexBackend?: 'memory' | 'sqlite';
+  /** 自定义 API 代理基地址（用于 Cloudflare Worker / Vite Proxy / 本地网关） */
+  baseUrl?: string;
+  /** 初始化后是否自动拉取远端最新状态（默认 true） */
+  autoPullOnInit?: boolean;
   /** 高级：直接注入 Provider 实例（嵌入/测试/演示共用同一"远端"） */
   providerInstance?: GitProvider;
   /** 初始化进度回调（自建向导 UI 用；步骤见 core ConnectStep） */
@@ -64,6 +74,7 @@ export async function connect(input: SdkConnectOptions | string): Promise<GitLit
     policy,
     allowForeignRepo: opts.allowForeignRepo,
     indexBackend: opts.indexBackend,
+    autoPullOnInit: opts.autoPullOnInit,
     onProgress: opts.onProgress as any
   });
 }
@@ -79,9 +90,18 @@ export async function initDB(
   const runtime = input?.runtime ?? createNodeRuntime();
   const emit = input?.onProgress;
   if (!input?.force && await runtime.fs.exists(BINDINGS_PATH)) {
-    emit?.('reconnect', { bindingsPath: BINDINGS_PATH });
-    const saved = JSON.parse(await runtime.fs.readFile(BINDINGS_PATH));
-    return connect({ ...saved, runtime, providerInstance: input?.providerInstance, onProgress: emit });
+    try {
+      const saved = JSON.parse(await runtime.fs.readFile(BINDINGS_PATH));
+      // 校验：旧记录非 memory 且请求 provider 与旧记录一致（或未传 provider）时复用
+      if (saved && saved.provider && saved.provider !== 'memory' && (!input?.provider || input.provider === saved.provider)) {
+        emit?.('reconnect', { bindingsPath: BINDINGS_PATH });
+        const database = input?.database ?? saved.database;
+        const repo = input?.repo ?? saved.repo;
+        return connect({ ...saved, ...input, database, repo, runtime, providerInstance: input?.providerInstance, onProgress: emit });
+      }
+    } catch {
+      // 损坏的 bindings 文件忽略并重新走初始化
+    }
   }
   emit?.('start');
   const opts: SdkConnectOptions = {
@@ -97,10 +117,34 @@ export async function initDB(
     onProgress: emit
   };
 
-  // github：无 token 则 Device Flow 登录（弹码/开浏览器由 onLoginCode 宿主处理）
-  if (opts.provider === 'github' && !opts.token && !opts.profile) {
-    emit?.('login', { flow: 'device' });
-    opts.token = await interactiveLogin(runtime, input?.onLoginCode);
+  // github：无 token 先检查凭据库缓存，若无才走 Device Flow 交互登录
+  if (opts.provider === 'github' && !opts.token && !opts.providerInstance) {
+    const credKey = opts.profile ? `${CRED_PREFIX}:${opts.profile}` : `${CRED_PREFIX}:default`;
+    const cached = await runtime.credential.get(credKey).catch(() => null);
+    if (cached) {
+      opts.token = cached;
+    } else {
+      emit?.('login', { flow: 'device' });
+      opts.token = await interactiveLogin(runtime, input?.onLoginCode);
+    }
+  }
+
+  // gitee：无 token 先检查凭据库缓存，若无才走 Gitee OAuth loopback 交互登录
+  if (opts.provider === 'gitee' && !opts.token && !opts.providerInstance) {
+    const credKey = opts.profile ? `gitlite:gitee:${opts.profile}` : `gitlite:gitee:default`;
+    const cached = await runtime.credential.get(credKey).catch(() => null);
+    if (cached) {
+      opts.token = cached;
+    } else {
+      emit?.('login', { flow: 'oauth' });
+      opts.token = await giteeLogin({
+        runtime,
+        onCode: url => {
+          if (input?.onLoginCode) input.onLoginCode(url, url);
+          else console.log(`[gitlite] 浏览器打开并授权: ${url}`);
+        }
+      });
+    }
   }
 
   // 模式 B 核心：登录后自动识别 owner（调 GET /user），用户无需手填用户名
@@ -122,8 +166,11 @@ export async function initDB(
       client = await connect({ ...opts, allowForeignRepo: true });
     } else throw e;
   }
-  const { provider, owner, repo, database, profile } = opts;
-  await runtime.fs.writeFile(BINDINGS_PATH, JSON.stringify({ provider, owner, repo, database, profile }, null, 2));
+  // memory 临时模式不落盘 bindings.json；真实 provider 成功后持久化
+  if (opts.provider !== 'memory') {
+    const { provider, owner, repo, database, profile } = opts;
+    await runtime.fs.writeFile(BINDINGS_PATH, JSON.stringify({ provider, owner, repo, database, profile }, null, 2));
+  }
   return client;
 }
 
@@ -135,11 +182,18 @@ export async function interactiveLogin(
   opts?: { clientId?: string }
 ): Promise<string> {
   const configured = (await getOAuthApp(runtime, 'github')).clientId;
+  const envId = process.env.GITLITE_DEVICE_CLIENT_ID ?? process.env.GITLITE_CLIENT_ID;
+  const clientId = opts?.clientId
+    ?? (envId !== GITLITE_GITHUB_CLIENT_ID ? envId : undefined)
+    ?? configured;
+  if (!clientId || clientId === GITLITE_GITHUB_CLIENT_ID || clientId === 'gitlite-placeholder') {
+    throw new OAuthAppNotConfiguredError('github');
+  }
   const { token } = await deviceFlowLogin(runtime.fetch, {
     onCode: onCode ?? ((code, uri) => {
       console.log(`[gitlite] 打开 ${uri} 并输入代码: ${code}`);
     })
-  }, { clientId: opts?.clientId ?? configured });
+  }, { clientId });
   await runtime.credential.set(`${CRED_PREFIX}:default`, token);
   return token;
 }
@@ -160,14 +214,17 @@ export async function giteeLogin(opts?: {
   signal?: AbortSignal;
 }): Promise<string> {
   const runtime = opts?.runtime ?? createNodeRuntime();
-  // clientId/secret 解析顺序：显式参数 > 环境变量 > app-config.json（引导配置模块写入）> 占位常量
   const configured = await getOAuthApp(runtime, 'gitee');
   const envId = resolveGiteeClientId();
   const clientId = opts?.clientId
-    ?? (envId !== GITLITE_GITEE_CLIENT_ID ? envId : undefined)
-    ?? configured.clientId
-    ?? GITLITE_GITEE_CLIENT_ID;
+    ?? (envId !== GITLITE_GITEE_CLIENT_ID && envId !== 'gitlite-placeholder' ? envId : undefined)
+    ?? configured.clientId;
+  if (!clientId || clientId === GITLITE_GITEE_CLIENT_ID || clientId === 'gitlite-placeholder') {
+    throw new OAuthAppNotConfiguredError('gitee');
+  }
   const clientSecret = opts?.clientSecret ?? resolveGiteeClientSecret() ?? configured.clientSecret;
+
+
   let state = '';
   const receiver = waitForRedirect({
     port: opts?.port,
@@ -250,8 +307,20 @@ async function buildProvider(opts: SdkConnectOptions, runtime: RuntimeAdapter): 
         ? await runtime.credential.get(`${prefix}:${opts.profile}`)
         : await runtime.credential.get(`${prefix}:default`));
   if (!token) throw new Error(`no ${opts.provider} token: pass token, login first, or set profile`);
-  return isGitee ? new GiteeProvider(token, runtime.fetch) : new GitHubProvider(token, runtime.fetch);
+  return isGitee
+    ? new GiteeProvider(token, runtime.fetch, opts.baseUrl ? { baseUrl: opts.baseUrl } : undefined)
+    : new GitHubProvider(token, runtime.fetch, opts.baseUrl ? { baseUrl: opts.baseUrl } : undefined);
 }
 
-export { GitLiteClient, MemoryProvider, GitHubProvider, GiteeProvider, Collection, POLICIES, SYS };
-export type { GitProvider, SyncPolicy, RuntimeAdapter };
+// 统一导出适配器与核心能力
+export {
+  GitLiteClient, MemoryProvider, GitHubProvider, GiteeProvider, Collection, POLICIES, SYS,
+  GITLITE_GITHUB_CLIENT_ID, GITLITE_GITEE_CLIENT_ID,
+  IndexedDbFsAdapter, IndexedDbCredentialStore, createBrowserRuntime,
+  createNodeRuntime, createNodeSqlite, waitForRedirect, GITLITE_LOOPBACK_PORT, renderOAuthSuccessHtml,
+  createOsCredentialStore, FileCredentialStore,
+  GitLiteError, ValidationError, UniqueConstraintError, NotFoundError, ConflictError,
+  QuotaExceededError, RateLimitError, AuthError, NetworkError, FormatVersionError, OAuthAppNotConfiguredError
+};
+
+export type { GitProvider, SyncPolicy, SyncState, RuntimeAdapter, Runner, ExecResult, SqliteAdapterFactory, SqliteDb, BrowserRuntimeOptions };

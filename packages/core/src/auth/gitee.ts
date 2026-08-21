@@ -3,13 +3,13 @@
 // loopback HTTP 回调服务由宿主提供（adapters-node waitForRedirect）。
 // PKCE：Gitee 无官方文档化支持（docs/02 §0 差异表）→ code_challenge/code_verifier 作可选参数保留；
 // state 必传（CSRF 防护，由调用方生成）。
-import { AuthError, NetworkError } from '../errors.js';
+import { AuthError, NetworkError, OAuthAppNotConfiguredError } from '../errors.js';
 
 export const GITEE_AUTHORIZE_URL = 'https://gitee.com/oauth/authorize';
 /** token 端点在站点根（gitee.com/oauth/token），不在 /api/v5 下——v5 路径 POST 表单会 404 */
 export const GITEE_TOKEN_URL = 'https://gitee.com/oauth/token';
 
-// 开发期与 GitHub Device Flow 同模式：优先读环境变量，正式发布注册 GitLite 官方 App 后替换占位
+// 开发与正式环境均保持安全隔离：优先读环境变量与 app-config.json，未配置时拦截并引导登记
 export const GITLITE_GITEE_CLIENT_ID = 'gitlite-placeholder';
 
 export function resolveGiteeClientId(): string {
@@ -18,10 +18,12 @@ export function resolveGiteeClientId(): string {
     ?? GITLITE_GITEE_CLIENT_ID;
 }
 
-/** 机密客户端密钥（Gitee 授权码换 token 需要；与 client_id 一起从注册页复制，经 env 注入） */
+/** 机密客户端密钥（Gitee 授权码换 token 需要；与 client_id 一起从注册页复制，经 env 或 app-config 注入） */
 export function resolveGiteeClientSecret(): string | undefined {
   return process.env.GITLITE_GITEE_CLIENT_SECRET ?? undefined;
 }
+
+
 
 export interface GiteeTokens {
   accessToken: string;
@@ -38,6 +40,9 @@ export function giteeAuthorizeUrl(opts: {
   scope?: string;
   codeChallenge?: string;
 }): string {
+  if (!opts.clientId || opts.clientId === GITLITE_GITEE_CLIENT_ID || opts.clientId === 'gitlite-placeholder') {
+    throw new OAuthAppNotConfiguredError('gitee');
+  }
   const q = new URLSearchParams({
     client_id: opts.clientId,
     redirect_uri: opts.redirectUri,
@@ -60,6 +65,9 @@ export async function exchangeGiteeCode(fetchFn: typeof fetch, opts: {
   clientSecret?: string;
   codeVerifier?: string;
 }): Promise<GiteeTokens> {
+  if (!opts.clientId || opts.clientId === GITLITE_GITEE_CLIENT_ID || opts.clientId === 'gitlite-placeholder') {
+    throw new OAuthAppNotConfiguredError('gitee');
+  }
   const params: Record<string, string> = {
     grant_type: 'authorization_code',
     code: opts.code,
@@ -78,7 +86,13 @@ export async function refreshGiteeToken(fetchFn: typeof fetch, opts: {
   clientSecret?: string;
   redirectUri?: string;
 }): Promise<GiteeTokens> {
+  if (!opts.clientId || opts.clientId === GITLITE_GITEE_CLIENT_ID || opts.clientId === 'gitlite-placeholder') {
+    throw new OAuthAppNotConfiguredError('gitee');
+  }
+
+
   const params: Record<string, string> = {
+
     grant_type: 'refresh_token',
     refresh_token: opts.refreshToken,
     client_id: opts.clientId

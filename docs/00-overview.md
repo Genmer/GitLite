@@ -47,8 +47,9 @@ L2 本地内存抽象  In-Memory Mirror + Sync Engine  ← 核心
 L1 供应商抽象    GitProvider 接口（GitHub/Gitee/GitLab/Local）
 L0 Git 内核      isomorphic-git(默认) / nodegit / git-cli
    远端          GitHub · Gitee
-横切  鉴权       OAuth/PAT → 系统凭据库
+横切  鉴权       OAuth 交互登录（产品首选）/ PAT（仅限自动化CI测试，不推荐用于用户产品） → 系统凭据库
 ```
+
 
 **焦点**：L2「本地内存抽象」——读写都先打在 In-Memory Mirror（读命中即返回、写乐观入缓存），再由 Sync Engine 批量 commit+push。这是「远端仓库当本地内存用」的实现机制。
 

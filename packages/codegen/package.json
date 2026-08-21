@@ -1,6 +1,6 @@
 {
   "name": "@gitlite/codegen",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "GitLite Codegen — schema(.schema.jsonc) → 强类型 TS Client",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,7 +11,14 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
-  "scripts": { "build": "tsc -p tsconfig.build.json", "test": "vitest run --passWithNoTests" },
-  "dependencies": { "@gitlite/core": "0.1.0" }
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@gitlite/core": "0.3.0"
+  }
 }

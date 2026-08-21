@@ -13,9 +13,10 @@
 - 表(collection) = 目录；行(document) = JSON 文件；按规模自动分级（<50行单文件 / <5000行一行一文件 / ≤10万行千行一分片 JSONL），对 API 透明
 - 事务 = 一次 Git commit（原子）；数据自带完整 Git 历史
 - 读写打在本地内存镜像（<1ms），远端低频批量同步：默认 economy 档 10 分钟窗口/100 条批量，启动与退出各强制同步一次（不可关）；写操作返回前已落盘本地队列，崩溃不丢
-- 初始化 `initDB()` 全自动：GitHub Device Flow 登录（弹官方页+8位码）→ 自动 GET /user 识别身份 → 自动建私有仓库 → 自动建分支 → bootstrap 系统文件 → 落本地绑定；二次调用幂等静默直连
+- 初始化 `initDB()` 全自动：统一预置官方授权应用 `gitlite`（无需开发者单独申请 OAuth 应用）→ 自动弹窗/Device Flow 登录 → 自动识别身份并建私有仓库与分支 → bootstrap 系统文件 → 落本地绑定；二次调用幂等静默直连
 - schema 用标准 JSON Schema Draft 2020-12 子集；GitLite 专有语义（unique/indexed/encrypted/immutable）一律放 `x-gitlite-*` 命名空间
 - 主键 ULID（26字符时间有序）；文档元字段 `_id` `_rev`（内容哈希，乐观锁）`createdAt` `updatedAt`
+
 
 ## 数据安全事实（对外口径，不可夸大也不可误导）
 
@@ -27,14 +28,18 @@
 
 ## Agent 硬规则（生成代码时必须遵守）
 
-1. 产品初始化只用 `initDB(opts)`；绝不引导终端用户申请 PAT 写进代码（`token` 参数仅限 CI/测试场景）
-2. 不要自行实现同步/缓存/重试调度——引擎已内置（economy 默认 + 启动/退出强制同步），只暴露选项
-3. 捕获 `ForeignRepoError`（仓库非空且非 GitLite 格式）时必须让用户显式确认后才能传 `allowForeignRepo: true`；确认后引擎承诺只新增 `_` 前缀系统文件、永不删除用户已有文件
-4. 错误处理按错误码分支，全部是 `GitLiteError` 子类：`VALIDATION` `UNIQUE_CONSTRAINT` `NOT_FOUND` `CONFLICT`(含 expected/actual) `QUOTA` `RATE_LIMIT`(retryAfterMs) `AUTH` `NETWORK` `FORMAT_VERSION` `FOREIGN_REPO`
-5. 不要假设"写完其他端立刻可见"（最终一致，默认10分钟级）；需要强读用 `consistency: 'fresh'`
-6. filter/更新操作符是 Mongo 风格对象，禁止拼 SQL 或字符串查询
-7. 分发与集成：第三方应用一律通过标准 npm 包安装（`npm i @gitlite/sdk`）或 Git 远程 URL，严禁引导用户使用本地 tarball / 相对路径等临时开发手段
-8. 版本管理：7 包 Monorepo 升级统一使用 `npm run version:bump <version>`（见 `docs/15-npm-publish.md`），禁止手动修改单个 package.json
+1. **🚨 严禁使用 Personal Access Token (PAT) 引导终端用户**：
+   - **绝不**在面向用户的应用中引导用户去申请 PAT 或在代码中硬编码/输入 PAT（**对终端用户极不友好**，要求用户懂 Git 平台后台且易泄露权限）。
+   - **产品与业务代码一律且只能使用 `const db = await initDB({ provider: 'github'|'gitee', database: 'myapp' })` 全自动引导登录与建仓**。
+   - `token` (PAT) 参数仅限在无人工界面的自动化 CI/CD 单元测试脚本中作为兜底。
+2. **不要自行实现同步/缓存/重试调度**——引擎已内置（economy 默认 + 启动/退出强制同步），只暴露选项
+3. **捕获 `ForeignRepoError`**（仓库非空且非 GitLite 格式）时必须让用户显式确认后才能传 `allowForeignRepo: true`；确认后引擎承诺只新增 `_` 前缀系统文件、永不删除用户已有文件
+4. **错误处理按错误码分支**，全部是 `GitLiteError` 子类：`VALIDATION` `UNIQUE_CONSTRAINT` `NOT_FOUND` `CONFLICT`(含 expected/actual) `QUOTA` `RATE_LIMIT`(retryAfterMs) `AUTH` `NETWORK` `FORMAT_VERSION` `FOREIGN_REPO` `OAUTH_APP_NOT_CONFIGURED`
+5. **不要假设"写完其他端立刻可见"**（最终一致，默认10分钟级）；需要强读用 `consistency: 'fresh'`
+6. **filter/更新操作符是 Mongo 风格对象**，禁止拼 SQL 或字符串查询
+7. **分发与集成**：第三方应用一律通过标准 npm 包安装（`npm i @gitlite/sdk`）或 Git 远程 URL，严禁引导用户使用本地 tarball / 相对路径等临时开发手段
+8. **版本管理**：7 包 Monorepo 升级统一使用 `npm run version:bump <version>`（见 `docs/15-npm-publish.md`），禁止手动修改单个 package.json
+
 
 ## 最小可用代码
 

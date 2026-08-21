@@ -52,24 +52,24 @@ gitlite/
 └── pnpm-workspace.yaml
 ```
 
-包依赖：`sdk` → `core`；`cli` → `sdk + codegen`；`react` → `sdk`。`core` 通过 `adapters/*` 注入运行时能力。
+包依赖：`sdk` → `core` + `adapters-node`；`cli` → `sdk + codegen + adapters-node`；`react` → `sdk`；`ui` → `sdk + react + adapters-node`。`core` 通过 `RuntimeAdapter` 注入运行时能力。
+`@gitlite/sdk` 作为一体化主包，已经统一 re-export 了 Node 适配器函数（`createNodeRuntime`、`createNodeSqlite`、`waitForRedirect`、`createOsCredentialStore`、`FileCredentialStore`）与核心错误类（`OAuthAppNotConfiguredError`、`GitLiteError` 等），业务层无需单独安装或引入 `@gitlite/adapters-node`。
 
 ## 二、SDK 核心 API
 
 ### 连接
 
 ```ts
-import { GitLite } from '@gitlite/sdk';
+import { connect, createNodeRuntime } from '@gitlite/sdk';
 
-const db = await GitLite.connect({
+const db = await connect({
   provider: 'github',
-  repo: { owner: 'alice', repo: 'my-app-db' },
-  auth: { type: 'stored', profile: 'alice-gh' },
-  sync: { mode: 'auto', policy: { batchSize: 10, timeWindow: 3000 } },
-  consistency: 'cache',
-  indexBackend: 'json'            // or 'sqlite'
+  owner: 'alice',
+  repo: 'my-app-db',
+  token: process.env.GITHUB_TOKEN
 });
 ```
+
 
 ### 连接字符串（URI 模式）
 
@@ -77,11 +77,12 @@ const db = await GitLite.connect({
 // 等价于上面
 const db = await GitLite.connect('gitlite://github:alice-gh@alice/my-app-db');
 
-// PAT 直接拼
+// 仅限无人工界面的 CI/CD 自动化测试（强烈不推荐在用户产品中使用 PAT，对终端用户极不友好）：
 const db = await GitLite.connect('gitlite://github:<token>@alice/my-app-db');
 
 // Gitee
 const db = await GitLite.connect('gitlite://gitee:alice-gitee@alice/my-app-db');
+
 ```
 
 URI 格式：
@@ -292,9 +293,10 @@ $ gitlite db drop old-db
 
 | 模式 | repo 参数来源 | 首次体验 | 适用 |
 |---|---|---|---|
-| **A. 开发者自己的仓库** | 写死在代码/配置里 | 终端用户登录**开发者或专用账号**（常配 PAT） | 个人工具、自用 app |
+| **A. 开发者自己的仓库** | 写死在代码/配置里 | 终端用户登录**开发者或专用账号**（PAT 仅限内部测试，强烈不推荐给用户使用） | 个人工具、自用脚本 |
 | **B. 终端用户自己的仓库**（推荐用于分发 app） | 登录后取 `user.login`，默认仓 `gitlite-repo` + `database` 用 app 约定名（如 `myapp`） | 每个用户首次启动：登录自己账号 → app 在**他的**账号下自动建仓+分支 | 分发的桌面/移动 app——**app 零后端，数据跟用户走**；多 app 共用一个 `gitlite-repo`，不额外吃仓库配额 |
-| **C. 组织共享仓库** | 写死指向组织仓库 | 用户登录（需组织权限）或配共享 PAT | 团队协作，多端连同一个库 |
+| **C. 组织共享仓库** | 写死指向组织仓库 | 用户登录（需组织权限） | 团队协作，多端连同一个库 |
+
 
 模式 B 的标准写法：
 
