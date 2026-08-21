@@ -51,11 +51,29 @@ describe('waitForRedirect（loopback 接收器）', () => {
   });
 
   it('renderOAuthSuccessHtml 生成包含样式、复制按钮与安全代码的完整 HTML', () => {
-    const html = renderOAuthSuccessHtml({ code: 'test-oauth-code-123', appName: 'Memex' });
+    const html = renderOAuthSuccessHtml({ code: 'test-oauth-code-123', appName: 'Memex', redirectUrl: 'http://127.0.0.1:4173' });
     expect(html).toContain('Memex');
     expect(html).toContain('test-oauth-code-123');
     expect(html).toContain('网页授权已通过');
     expect(html).toContain('navigator.clipboard.writeText');
+    expect(html).toContain('http://127.0.0.1:4173');
+    expect(html).toContain('targetRedirect');
+  });
+
+  it('waitForRedirect 支持 return_to / redirectUrl 动态返回域名', async () => {
+    let settle!: (v: { url: URL; port: number }) => void;
+    const done = new Promise<{ url: URL; port: number }>(r => { settle = r; });
+    const port = await new Promise<number>(res => {
+      void waitForRedirect({ port: 0, redirectUrl: 'http://app.example.com', onListening: res }).then(settle);
+    });
+
+    const res = await fetch(`http://127.0.0.1:${port}/callback?code=def&return_to=http://my-custom-domain.com`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('http://my-custom-domain.com');
+
+    const hit = await done;
+    expect(hit.url.searchParams.get('code')).toBe('def');
   });
 
   it('默认端口常量存在（docs/04 固定 loopback 端口）', () => {

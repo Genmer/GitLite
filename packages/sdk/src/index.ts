@@ -206,6 +206,8 @@ export async function giteeLogin(opts?: {
   clientSecret?: string;
   scope?: string;
   port?: number;
+  host?: string;
+  redirectUrl?: string;
   runtime?: RuntimeAdapter;
   /** 换 token 用的 fetch（缺省 runtime.fetch；测试注入） */
   fetchFn?: typeof fetch;
@@ -224,13 +226,15 @@ export async function giteeLogin(opts?: {
   }
   const clientSecret = opts?.clientSecret ?? resolveGiteeClientSecret() ?? configured.clientSecret;
 
-
   let state = '';
   const receiver = waitForRedirect({
     port: opts?.port,
+    host: opts?.host,
+    redirectUrl: opts?.redirectUrl,
     signal: opts?.signal,
     onListening: port => {
-      const redirectUri = `http://127.0.0.1:${port}/callback`;
+      const redirectHost = opts?.host ?? '127.0.0.1';
+      const redirectUri = `http://${redirectHost}:${port}/callback`;
       state = Array.from(runtime.crypto.randomBytes(16), b => b.toString(16).padStart(2, '0')).join('');
       const url = giteeAuthorizeUrl({
         clientId, redirectUri, state,

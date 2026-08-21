@@ -114,11 +114,15 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, ur
       loginAbort.get(provider)?.abort(); // 中止旧接收器（上一次失败/放弃的登录仍占着 18365）
       const controller = new AbortController();
       loginAbort.set(provider, controller);
+      const hostHeader = req.headers.host ?? `127.0.0.1:${PORT}`;
+      const proto = req.headers['x-forwarded-proto'] ?? 'http';
+      const currentUrl = `${proto}://${hostHeader}`;
       const id = startJob(async job => {
         try {
           if (provider === 'gitee') {
             await giteeLogin({
               runtime, signal: controller.signal,
+              redirectUrl: currentUrl,
               onCode: u => { job.hint = `浏览器打开并授权：${u}`; }
             });
           } else {
@@ -485,7 +489,9 @@ async function main(): Promise<void> {
 </body></html>`;
 
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`);
+    const hostHeader = req.headers.host ?? `127.0.0.1:${PORT}`;
+    const proto = req.headers['x-forwarded-proto'] ?? 'http';
+    const url = new URL(req.url ?? '/', `${proto}://${hostHeader}`);
     if (url.pathname.startsWith('/api/')) return void handleApi(req, res, url);
     if (url.pathname === '/app.js') {
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8' });
@@ -495,8 +501,9 @@ async function main(): Promise<void> {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     res.end(html);
   });
-  await new Promise<void>(r => server.listen(PORT, '127.0.0.1', r));
-  const u = `http://127.0.0.1:${PORT}`;
+  const HOST = process.env.HOST ?? '0.0.0.0';
+  await new Promise<void>(r => server.listen(PORT, HOST, r));
+  const u = `http://${HOST === '0.0.0.0' ? '127.0.0.1' : HOST}:${PORT}`;
   console.log(`GitLite 引导配置演示页：${u}\n（GitHub Device Flow / Gitee OAuth loopback 均在本服务执行；Ctrl+C 退出）`);
   exec(process.platform === 'win32' ? `start "" "${u}"` : process.platform === 'darwin' ? `open "${u}"` : `xdg-open "${u}"`, () => {});
 }

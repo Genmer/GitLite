@@ -5,10 +5,12 @@ import type { AddressInfo } from 'node:net';
 
 export const GITLITE_LOOPBACK_PORT = 18365; // docs/04 固定 loopback 端口（OAuth App 需预注册回调地址）
 
-export function renderOAuthSuccessHtml(opts?: { code?: string; appName?: string }): string {
+export function renderOAuthSuccessHtml(opts?: { code?: string; appName?: string; redirectUrl?: string }): string {
   const rawCode = opts?.code ?? '';
   const safeCode = rawCode.replace(/[^\w-]/g, '');
   const appName = opts?.appName ?? 'GitLite';
+  const rawRedirectUrl = opts?.redirectUrl ?? '';
+  const safeRedirectUrl = rawRedirectUrl.replace(/[^\w-.:/?&=#%]/g, '');
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -51,9 +53,17 @@ export function renderOAuthSuccessHtml(opts?: { code?: string; appName?: string 
       display: flex; align-items: center; justify-content: center; gap: 8px;
       width: 100%; padding: 12px 0; background: linear-gradient(135deg, #10b981, #059669);
       color: #ffffff; border: none; border-radius: 12px; font-size: 13px; font-weight: 700;
-      cursor: pointer; transition: all 0.2s; box-shadow: 0 6px 16px -4px rgba(16, 185, 129, 0.4);
+      cursor: pointer; text-decoration: none; transition: all 0.2s; box-shadow: 0 6px 16px -4px rgba(16, 185, 129, 0.4);
+      margin-bottom: 10px;
     }
     .btn-primary:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-secondary {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; padding: 10px 0; background: #1e2433; border: 1px solid #2d3348;
+      color: #d1d5db; border-radius: 12px; font-size: 12.5px; font-weight: 600;
+      cursor: pointer; text-decoration: none; transition: all 0.2s;
+    }
+    .btn-secondary:hover { background: #283044; color: #ffffff; }
     .tips { font-size: 12px; color: #6b7280; line-height: 1.6; border-top: 1px solid #242938; padding-top: 16px; margin-top: 16px; text-align: left; }
     .tips b { color: #d1d5db; }
   </style>
@@ -70,6 +80,9 @@ export function renderOAuthSuccessHtml(opts?: { code?: string; appName?: string 
     <button class="btn-primary" id="copyBtn" onclick="copyCode()">
       <span id="btnText">📋 点击复制授权码 (自动写入已就绪)</span>
     </button>` : ''}
+    <div id="returnBox" style="display:none;margin-top:10px;">
+      <a id="returnLink" href="#" class="btn-primary">👉 正在返回应用页面…</a>
+    </div>
     <div class="tips">
       💡 <b>操作指引</b>：<br>
       • 本地客户端已自动捕获授权结果，您可以直接关闭此标签页；<br>
@@ -78,15 +91,52 @@ export function renderOAuthSuccessHtml(opts?: { code?: string; appName?: string 
   </div>
   <script>
     const code = '${safeCode}';
+    let targetRedirect = '${safeRedirectUrl}';
+
+    // 尝试从当前 URL 参数或 referrer 获取真实应用域名/返回地址
+    if (!targetRedirect) {
+      try {
+        const q = new URLSearchParams(window.location.search);
+        const ret = q.get('return_to') || q.get('redirect_uri');
+        if (ret && (ret.startsWith('http://') || ret.startsWith('https://') || ret.startsWith('/'))) {
+          targetRedirect = ret;
+        } else if (document.referrer && !document.referrer.includes('/callback')) {
+          targetRedirect = document.referrer;
+        }
+      } catch(e) {}
+    }
+
     if (code) {
       try { navigator.clipboard.writeText(code); } catch(e) {}
     }
+
     function copyCode() {
       if (!code) return;
       navigator.clipboard.writeText(code).then(() => {
         const btn = document.getElementById('btnText');
         if (btn) btn.innerText = '✓ 已复制！返回客户端即可';
       });
+    }
+
+    // 跨窗口通信与自动返回
+    if (window.opener) {
+      try {
+        window.opener.postMessage({ type: 'gitlite:oauth:success', code }, '*');
+        setTimeout(() => { try { window.close(); } catch(e) {} }, 1200);
+      } catch(e) {}
+    }
+
+    if (targetRedirect) {
+      const box = document.getElementById('returnBox');
+      const link = document.getElementById('returnLink');
+      if (box && link) {
+        box.style.display = 'block';
+        link.href = targetRedirect;
+        link.innerText = '👉 返回应用页面 (' + targetRedirect.split('/')[2] + ')';
+        setTimeout(() => {
+          try { window.location.href = targetRedirect; } catch(e) {}
+        }, 1500);
+      }
     }
   </script>
 </body>
@@ -99,25 +149,30 @@ export function renderOAuthSuccessHtml(opts?: { code?: string; appName?: string 
  *  @returns 回调完整 URL（含 query）；超时/端口占用/取消拒绝 */
 export function waitForRedirect(opts?: {
   port?: number;
+  host?: string;
   path?: string;
+  redirectUrl?: string;
   timeoutMs?: number;
   onListening?: (port: number) => void;
   signal?: AbortSignal;
 }): Promise<{ url: URL; port: number }> {
   const port = opts?.port ?? GITLITE_LOOPBACK_PORT;
+  const host = opts?.host ?? '127.0.0.1';
   const path = opts?.path ?? '/callback';
   const timeoutMs = opts?.timeoutMs ?? 15 * 60_000;
   return new Promise((resolve, reject) => {
     let boundPort = port;
     let settled = false;
     const server = http.createServer((req, res) => {
-      const url = new URL(req.url ?? '/', `http://127.0.0.1:${boundPort}`);
+      const hostHeader = req.headers.host ?? `${host}:${boundPort}`;
+      const url = new URL(req.url ?? '/', `http://${hostHeader}`);
       if (url.pathname !== path) {
         res.writeHead(404).end();
         return;
       }
       const code = url.searchParams.get('code') || undefined;
-      const html = renderOAuthSuccessHtml({ code });
+      const redirectUrl = url.searchParams.get('return_to') || url.searchParams.get('redirect_uri') || opts?.redirectUrl;
+      const html = renderOAuthSuccessHtml({ code, redirectUrl });
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'content-length': Buffer.byteLength(html),
@@ -148,7 +203,7 @@ export function waitForRedirect(opts?: {
       return;
     }
     opts?.signal?.addEventListener('abort', onAbort, { once: true });
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, host, () => {
       boundPort = (server.address() as AddressInfo).port;
       opts?.onListening?.(boundPort);
     });
